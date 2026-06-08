@@ -4,7 +4,7 @@ import cors from 'cors';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initDatabase } from './database.js';
+import { initDatabase, handleIncomingItem, handleIncomingStatusUpdate } from './database.js';
 import { WsClientManager } from './ws-client.js';
 import { createApiRouter } from './routes.js';
 
@@ -64,10 +64,39 @@ export async function startServer(): Promise<http.Server> {
     wsManager?.flushSyncQueue();
   });
 
-  // 7. Connect to the hub server
+  // 7. Wire incoming events from the hub to local database handlers
+  wsManager.on('sync_dump', async (payload: any) => {
+    const items: any[] = payload?.items ?? [];
+    console.log(`[Server] Received SYNC_DUMP with ${items.length} item(s)`);
+    for (const item of items) {
+      try {
+        await handleIncomingItem(item);
+      } catch (err) {
+        console.error('[Server] Error handling sync_dump item:', err);
+      }
+    }
+  });
+
+  wsManager.on('item_broadcast', async (payload: any) => {
+    try {
+      await handleIncomingItem(payload);
+    } catch (err) {
+      console.error('[Server] Error handling item_broadcast:', err);
+    }
+  });
+
+  wsManager.on('status_update', async (payload: any) => {
+    try {
+      await handleIncomingStatusUpdate(payload);
+    } catch (err) {
+      console.error('[Server] Error handling status_update:', err);
+    }
+  });
+
+  // 8. Connect to the hub server
   wsManager.connect();
 
-  // 8. Listen on the configured port
+  // 9. Listen on the configured port
   return new Promise<http.Server>((resolve, reject) => {
     server!.listen(PORT, () => {
       console.log(`[Server] Client server listening on port ${PORT}`);

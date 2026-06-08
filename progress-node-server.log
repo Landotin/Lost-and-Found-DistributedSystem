@@ -1,0 +1,48 @@
+================================================================================
+ Progress Log - Phase 3: Global Ledger - Node Server Backend Implementation
+ Worker: Stephen Jed Fetalino (Claude Agent)
+ Date:   2026-06-08
+================================================================================
+
+[2026-06-08 21:02] START - Begin implementation of client/server Phase 3.
+
+[2026-06-08 21:02] TDD RED - Wrote 15 failing tests for:
+  - saveOrUpdatePerson (5 tests): insert, update, mobile redacted guard, etc.
+  - handleIncomingItem (5 tests): person+item save, LWW newer/older, synced=1, no-person edge case
+  - handleIncomingStatusUpdate (5 tests): status claim, LWW newer/older, update, nonexistent item
+
+[2026-06-08 21:03] IMPLEMENT - database.ts:
+  - Added saveOrUpdatePerson() with [REDACTED] mobile guard
+  - Added handleIncomingItem() with LWW resolution and person extraction
+  - Added handleIncomingStatusUpdate() with LWW resolution
+  - Updated createItem() to accept updated_at/created_at params
+
+[2026-06-08 21:04] TEST FIX - Fixed 3 failing handleIncomingStatusUpdate tests by setting
+  older updated_at on initial createItem calls so test timestamps are newer.
+
+[2026-06-08 21:04] RESULT - 15/15 database tests pass.
+
+[2026-06-08 21:05] IMPLEMENT - ws-client.ts:
+  - Updated flushSyncQueue() to fetch full surrenderer person via getPersonById()
+    and include the full person object in surrendered_by payload.
+
+[2026-06-08 21:05] IMPLEMENT - routes.ts:
+  - POST /api/items: ITEM_BROADCAST now includes full person object in surrendered_by
+  - PATCH /api/items/:id/status: STATUS_UPDATE now includes full person object in claimed_by
+
+[2026-06-08 21:05] IMPLEMENT - index.ts:
+  - Imported handleIncomingItem and handleIncomingStatusUpdate
+  - Registered sync_dump handler (loops items, calls handleIncomingItem)
+  - Registered item_broadcast handler (calls handleIncomingItem)
+  - Registered status_update handler (calls handleIncomingStatusUpdate)
+
+[2026-06-08 21:05] RESULT - All 24 tests pass (9 existing + 15 new).
+  - src/database.test.ts: 15/15 passed
+  - src/index.test.ts: 9/9 passed
+
+[2026-06-08 21:05] COMPLETE - All Phase 3 requirements implemented:
+  1. Local DB LWW helpers (saveOrUpdatePerson, handleIncomingItem, handleIncomingStatusUpdate)
+  2. Full person payloads in ws-client flushSyncQueue and routes broadcasts
+  3. Event listeners registered in index.ts for sync_dump, item_broadcast, status_update
+  4. All client-server tests pass
+================================================================================
