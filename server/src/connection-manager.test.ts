@@ -251,3 +251,77 @@ describe('handleConnection — HELLO protocol', () => {
   });
 });
 
+describe('broadcastToOthers', () => {
+  let manager: ConnectionManager;
+  const mockWss = {} as WebSocketServer;
+
+  beforeEach(() => {
+    manager = new ConnectionManager(mockWss, 'test-secret');
+  });
+
+  it('sends message to all nodes except the sender', () => {
+    const received: string[] = [];
+    const sender = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const other1 = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const other2 = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+
+    const senderNode = manager.registerNode(sender, 'Dept Sender');
+    manager.registerNode(other1, 'Dept Other 1');
+    manager.registerNode(other2, 'Dept Other 2');
+
+    manager.broadcastToOthers(senderNode.socketId, 'TEST_EVENT', { msg: 'hello' });
+
+    expect(received.length).toBe(2);
+    for (const msg of received) {
+      const parsed = JSON.parse(msg);
+      expect(parsed.event).toBe('TEST_EVENT');
+      expect(parsed.payload).toEqual({ msg: 'hello' });
+    }
+  });
+
+  it('does not send to sender', () => {
+    const received: string[] = [];
+    const sender = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+
+    const senderNode = manager.registerNode(sender, 'Dept Sender');
+    manager.broadcastToOthers(senderNode.socketId, 'TEST', {});
+    expect(received.length).toBe(0);
+  });
+
+  it('does not send to nodes with non-open readyState', () => {
+    const received: string[] = [];
+    const sender = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const closedSocket = {
+      on: () => {},
+      readyState: 3, // CLOSED
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+
+    const senderNode = manager.registerNode(sender, 'Dept Sender');
+    manager.registerNode(closedSocket, 'Dept Closed');
+
+    manager.broadcastToOthers(senderNode.socketId, 'TEST', {});
+    expect(received.length).toBe(0);
+  });
+});
+

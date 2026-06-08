@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { WebSocketServer } from 'ws';
-import { initDatabase } from './database.js';
+import { initDatabase, getSyncDumpForNode, savePerson, saveItem } from './database.js';
 import { ConnectionManager, handleConnection } from './connection-manager.js';
 import { HeartbeatManager } from './heartbeat.js';
 import { fileURLToPath } from 'url';
@@ -66,11 +66,110 @@ export async function startServer(): Promise<http.Server> {
   });
 
   // Wire message events from connection manager to heartbeat manager
-  manager.on('message', ({ socketId, message }: { socketId: string; message: any }) => {
+  manager.on('message', async ({ socketId, message }: { socketId: string; message: any }) => {
     if (message.event === 'ACK') {
       if (heartbeatManager) {
         heartbeatManager.handleAck(socketId);
       }
+      return;
+    }
+
+    // Handle ITEM_BROADCAST: save item and person, broadcast to others
+    if (message.event === 'ITEM_BROADCAST') {
+      const payload = message.payload as any;
+      try {
+        // Save surrenderer if provided
+        if (payload.surrendered_by?.id) {
+          await savePerson(payload.surrendered_by);
+        }
+        // Save item
+        await saveItem({
+          id: payload.id,
+          item_name: payload.item_name,
+          description: payload.description,
+          category: payload.category,
+          department_origin: payload.department_origin,
+          status: payload.status,
+          surrendered_by: payload.surrendered_by?.id ?? null,
+          claimed_by: payload.claimed_by?.id ?? null,
+          claimed_at: payload.claimed_at ?? null,
+          updated_at: payload.updated_at ?? null,
+          created_at: payload.created_at ?? null,
+        });
+        // Broadcast to other nodes
+        if (manager) {
+          manager.broadcastToOthers(socketId, 'ITEM_BROADCAST', payload);
+        }
+      } catch (err) {
+        console.error('Failed to handle ITEM_BROADCAST:', err);
+      }
+      return;
+    }
+
+    // Handle STATUS_UPDATE: save item status and claimant, broadcast to others
+    if (message.event === 'STATUS_UPDATE') {
+      const payload = message.payload as any;
+      try {
+        // Save claimant if provided
+        if (payload.claimed_by?.id) {
+          await savePerson(payload.claimed_by);
+        }
+        // Update the item's status and claimant details
+        await saveItem({
+          id: payload.id,
+          item_name: payload.item_name,
+          description: payload.description,
+          category: payload.category,
+          department_origin: payload.department_origin,
+          status: payload.status,
+          claimed_by: payload.claimed_by?.id ?? null,
+          claimed_at: payload.claimed_at ?? null,
+          updated_at: payload.updated_at ?? null,
+          created_at: payload.created_at ?? null,
+        });
+        // Broadcast to other nodes
+        if (manager) {
+          manager.broadcastToOthers(socketId, 'STATUS_UPDATE', payload);
+        }
+      } catch (err) {
+        console.error('Failed to handle STATUS_UPDATE:', err);
+      }
+      return;
+    }
+
+    // Handle SYNC_QUEUE_FLUSH: save batch of items and broadcast each to others
+    if (message.event === 'SYNC_QUEUE_FLUSH') {
+      const payload = message.payload as any;
+      const items: any[] = payload?.items ?? [];
+      for (const item of items) {
+        try {
+          if (item.surrendered_by?.id) {
+            await savePerson(item.surrendered_by);
+          }
+          if (item.claimed_by?.id) {
+            await savePerson(item.claimed_by);
+          }
+          await saveItem({
+            id: item.id,
+            item_name: item.item_name,
+            description: item.description,
+            category: item.category,
+            department_origin: item.department_origin,
+            status: item.status,
+            surrendered_by: item.surrendered_by?.id ?? null,
+            claimed_by: item.claimed_by?.id ?? null,
+            claimed_at: item.claimed_at ?? null,
+            updated_at: item.updated_at ?? null,
+            created_at: item.created_at ?? null,
+          });
+          if (manager) {
+            manager.broadcastToOthers(socketId, 'ITEM_BROADCAST', item);
+          }
+        } catch (err) {
+          console.error('Failed to handle SYNC_QUEUE_FLUSH item:', err);
+        }
+      }
+      return;
     }
   });
 
@@ -92,13 +191,27 @@ export async function startServer(): Promise<http.Server> {
     }
   };
 
-  // 9. Start heartbeat pings
+  // 9. Send SYNC_DUMP to newly registered node
+  manager.on('registered', async ({ socketId, deptName, socket }: { socketId: string; deptName: string; socket: any }) => {
+    try {
+      const items = await getSyncDumpForNode(deptName);
+      if (socket.readyState === 1) { // WebSocket.OPEN
+        socket.send(JSON.stringify({
+          event: 'SYNC_DUMP',
+          payload: { items },
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to send SYNC_DUMP:', err);
+    }
+  });
+
+  // 10. Start heartbeat pings
   heartbeatManager.start();
 
-  // 10. Listen on PORT
+  // 11. Listen on PORT
   return new Promise<http.Server>((resolve, reject) => {
     server!.listen(PORT, () => {
-      // 10. Log
       console.log(`Hub server listening on port ${PORT}`);
       resolve(server!);
     });
