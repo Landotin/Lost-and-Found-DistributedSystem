@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { WebSocketServer } from 'ws';
-import { initDatabase, getSyncDumpForNode, savePerson, saveItem } from './database.js';
+import { initDatabase, getSyncDumpForNode, savePerson, saveItem, db } from './database.js';
 import { ConnectionManager, handleConnection } from './connection-manager.js';
 import { HeartbeatManager } from './heartbeat.js';
 import { fileURLToPath } from 'url';
@@ -114,22 +114,38 @@ export async function startServer(): Promise<http.Server> {
         if (payload.claimed_by?.id) {
           await savePerson(payload.claimed_by);
         }
-        // Update the item's status and claimant details
-        await saveItem({
-          id: payload.id,
-          item_name: payload.item_name,
-          description: payload.description,
-          category: payload.category,
-          department_origin: payload.department_origin,
-          status: payload.status,
-          claimed_by: payload.claimed_by?.id ?? null,
-          claimed_at: payload.claimed_at ?? null,
-          updated_at: payload.updated_at ?? null,
-          created_at: payload.created_at ?? null,
-        });
-        // Broadcast to other nodes
-        if (manager) {
-          manager.broadcastToOthers(socketId, 'STATUS_UPDATE', payload);
+
+        // Fetch existing item to preserve fields and get origin department
+        const existingItem = await db.get<any>(
+          'SELECT * FROM items WHERE id = ?',
+          [payload.id]
+        );
+
+        if (existingItem) {
+          // Update the item's status and claimant details
+          await saveItem({
+            id: payload.id,
+            item_name: existingItem.item_name,
+            description: existingItem.description,
+            category: existingItem.category,
+            department_origin: existingItem.department_origin,
+            status: payload.status,
+            surrendered_by: existingItem.surrendered_by,
+            claimed_by: payload.claimed_by?.id ?? null,
+            claimed_at: payload.claimed_at ?? new Date().toISOString(),
+            updated_at: payload.updated_at ?? new Date().toISOString(),
+            created_at: existingItem.created_at,
+          });
+
+          // Broadcast to other nodes
+          if (manager) {
+            manager.broadcastToOthers(
+              socketId,
+              'STATUS_UPDATE',
+              payload,
+              existingItem.department_origin
+            );
+          }
         }
       } catch (err) {
         console.error('Failed to handle STATUS_UPDATE:', err);

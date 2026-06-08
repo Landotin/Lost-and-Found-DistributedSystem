@@ -59,10 +59,10 @@ describe('LogItemForm', () => {
       synced: 0,
     };
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(mockItem),
-    });
+    }));
 
     const onItemCreated = vi.fn();
     render(<LogItemForm onItemCreated={onItemCreated} />);
@@ -77,7 +77,7 @@ describe('LogItemForm', () => {
   });
 
   it('handles API error gracefully', async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
     render(<LogItemForm />);
 

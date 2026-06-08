@@ -112,6 +112,42 @@ describe('Hub Integration Tests', () => {
           console.error('Failed to handle ITEM_BROADCAST:', err);
         }
       }
+
+      if (message.event === 'STATUS_UPDATE') {
+        const payload = message.payload as any;
+        try {
+          if (payload.claimed_by?.id) {
+            await savePerson(payload.claimed_by);
+          }
+          const existingItem = await db.get<any>(
+            'SELECT * FROM items WHERE id = ?',
+            [payload.id]
+          );
+          if (existingItem) {
+            await saveItem({
+              id: payload.id,
+              item_name: existingItem.item_name,
+              description: existingItem.description,
+              category: existingItem.category,
+              department_origin: existingItem.department_origin,
+              status: payload.status,
+              surrendered_by: existingItem.surrendered_by,
+              claimed_by: payload.claimed_by?.id ?? null,
+              claimed_at: payload.claimed_at ?? new Date().toISOString(),
+              updated_at: payload.updated_at ?? new Date().toISOString(),
+              created_at: existingItem.created_at,
+            });
+            manager.broadcastToOthers(
+              socketId,
+              'STATUS_UPDATE',
+              payload,
+              existingItem.department_origin
+            );
+          }
+        } catch (err) {
+          console.error('Failed to handle STATUS_UPDATE:', err);
+        }
+      }
     });
   });
 
@@ -326,5 +362,136 @@ describe('Hub Integration Tests', () => {
       ws.close();
     },
     15000,
+  );
+
+  it(
+    'ITEM_BROADCAST: PII is redacted for unrelated department nodes',
+    async () => {
+      const ws1 = await createClient(port);
+      sendMessage(ws1, 'HELLO', { dept_name: 'CCS', dept_secret: ADMIN_SECRET });
+      // Wait for setup
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timeout ws1 setup')), 8000);
+        let count = 0;
+        ws1.on('message', () => {
+          count++;
+          if (count >= 3) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      });
+
+      const ws2 = await createClient(port);
+      sendMessage(ws2, 'HELLO', { dept_name: 'COE', dept_secret: ADMIN_SECRET });
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timeout ws2 setup')), 8000);
+        let count = 0;
+        ws2.on('message', () => {
+          count++;
+          if (count >= 3) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      });
+
+      const ws2MessagePromise = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timeout broadcast')), 5000);
+        ws2.on('message', (data) => {
+          clearTimeout(timer);
+          try {
+            resolve(JSON.parse(data.toString()));
+          } catch {
+            reject(new Error('Invalid JSON'));
+          }
+        });
+      });
+
+      // ws1 (CCS) broadcasts item with full surrenderer details
+      sendMessage(ws1, 'ITEM_BROADCAST', {
+        id: 'int-broadcast-pii-1',
+        item_name: 'PII Item',
+        department_origin: 'CCS',
+        status: 'found',
+        surrendered_by: {
+          id: 'int-person-pii',
+          full_name: 'Secret Person',
+          mobile: '0917-PII-SEC',
+          id_type: 'Passport',
+          id_number: 'PP12345',
+        },
+      });
+
+      const ws2Msg = await ws2MessagePromise;
+      expect(ws2Msg.event).toBe('ITEM_BROADCAST');
+      // ws2 is COE (unrelated to CCS), so PII must be redacted
+      expect(ws2Msg.payload.surrendered_by.mobile).toBe('[REDACTED]');
+      expect(ws2Msg.payload.surrendered_by.id_type).toBe('[REDACTED]');
+      expect(ws2Msg.payload.surrendered_by.id_number).toBe('[REDACTED]');
+      expect(ws2Msg.payload.surrendered_by.full_name).toBe('Secret Person');
+
+      ws1.close();
+      ws2.close();
+    },
+    30000,
+  );
+
+  it(
+    'STATUS_UPDATE: PII is redacted for unrelated department nodes',
+    async () => {
+      // First save an item under CCS department
+      await saveItem({
+        id: 'int-status-pii-item',
+        item_name: 'Status PII Item',
+        department_origin: 'CCS',
+        status: 'found',
+      });
+
+      const ws1 = await createClient(port);
+      sendMessage(ws1, 'HELLO', { dept_name: 'CCS', dept_secret: ADMIN_SECRET });
+      await new Promise<void>((r) => setTimeout(r, 500)); // let it settle
+
+      const ws2 = await createClient(port);
+      sendMessage(ws2, 'HELLO', { dept_name: 'COE', dept_secret: ADMIN_SECRET });
+      await new Promise<void>((r) => setTimeout(r, 500)); // let it settle
+
+      const ws2MessagePromise = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timeout broadcast')), 5000);
+        ws2.on('message', (data) => {
+          try {
+            const parsed = JSON.parse(data.toString());
+            if (parsed.event === 'STATUS_UPDATE') {
+              clearTimeout(timer);
+              resolve(parsed);
+            }
+          } catch { /* ignore */ }
+        });
+      });
+
+      // ws1 (CCS) sends status update with full claimant details
+      sendMessage(ws1, 'STATUS_UPDATE', {
+        id: 'int-status-pii-item',
+        status: 'claimed',
+        claimed_by: {
+          id: 'int-claimant-pii',
+          full_name: 'Claimant Person',
+          mobile: '0917-CLAIM-SEC',
+          id_type: 'SSS',
+          id_number: 'SSS-888',
+        },
+      });
+
+      const ws2Msg = await ws2MessagePromise;
+      expect(ws2Msg.event).toBe('STATUS_UPDATE');
+      // ws2 is COE (unrelated to CCS), so PII must be redacted
+      expect(ws2Msg.payload.claimed_by.mobile).toBe('[REDACTED]');
+      expect(ws2Msg.payload.claimed_by.id_type).toBe('[REDACTED]');
+      expect(ws2Msg.payload.claimed_by.id_number).toBe('[REDACTED]');
+
+      ws1.close();
+      ws2.close();
+    },
+    30000,
   );
 });

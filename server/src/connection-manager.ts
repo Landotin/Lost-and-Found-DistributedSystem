@@ -90,12 +90,48 @@ export class ConnectionManager extends EventEmitter {
   /**
    * Send a WebSocket message to all connected department nodes
    * except the one identified by senderSocketId.
+   * Redacts PII details (mobile, id_type, id_number) for unrelated department nodes.
    */
-  broadcastToOthers(senderSocketId: string, event: string, payload: unknown): void {
-    const data = JSON.stringify({ event, payload } satisfies WsMessage);
+  broadcastToOthers(
+    senderSocketId: string,
+    event: string,
+    payload: any,
+    deptOrigin?: string
+  ): void {
+    const redactPersonPII = (person: any) => {
+      if (!person || typeof person !== 'object') return person;
+      return {
+        ...person,
+        mobile: '[REDACTED]',
+        id_type: '[REDACTED]',
+        id_number: '[REDACTED]',
+      };
+    };
 
     for (const [id, node] of this.nodes) {
       if (id !== senderSocketId && node.socket.readyState === WebSocket.OPEN) {
+        let relayedPayload = payload;
+
+        // Check if the node is unrelated to the origin department
+        const itemOrigin = deptOrigin || payload?.department_origin;
+        const isSameDept = itemOrigin && node.deptName === itemOrigin;
+
+        if (!isSameDept) {
+          if (event === 'ITEM_BROADCAST') {
+            relayedPayload = {
+              ...payload,
+              surrendered_by: redactPersonPII(payload.surrendered_by),
+              claimed_by: redactPersonPII(payload.claimed_by),
+            };
+          } else if (event === 'STATUS_UPDATE') {
+            relayedPayload = {
+              ...payload,
+              claimed_by: redactPersonPII(payload.claimed_by),
+            };
+          }
+        }
+
+        const data = JSON.stringify({ event, payload: relayedPayload } satisfies WsMessage);
         node.socket.send(data);
       }
     }

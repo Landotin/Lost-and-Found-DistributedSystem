@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import ConnectionStatus from '../ConnectionStatus';
-import type { StatusResponse, PendingSyncResponse } from '../../types';
+import type { StatusResponse } from '../../types';
 
 describe('ConnectionStatus', () => {
   it('renders "Connected" when status is connected with 2 nodes', () => {

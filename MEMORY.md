@@ -6,8 +6,8 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 2 bug fixes & refactoring complete. Consolidated API status polling to parent App.tsx, resolved form retry duplicate person bug, refactored usePolling to be ref-safe, and passed all 69 frontend unit tests.
-*   **Current Task**: Ready for Phase 3: Global Ledger.
+*   **Task Compile**: Phase 3 Global Ledger completed. Dynamic item listing, filtration by status and department, title search, and real-time PII-redacting synchronizations are verified.
+*   **Current Task**: Ready for Phase 4: Claims Processing.
 *   **Completed Tasks**:
     *   `[x]` Reviewed and corrected custom agent configurations in `.claude/agents/` (corrected tool names to standard Claude Code conventions and moved `code-reviewer.md` to `agents/` directory).
     *   `[x]` PRD alignment checks.
@@ -23,8 +23,9 @@ This file tracks the historical context, architectural decisions, completed mile
     *   `[x]` **Phase 2: Department Node Frontend & Local DB** — Multi-agent pipeline with spec-gatherers (frontend/client-server/hub) → 5 parallel workers → code-reviewer. See detailed breakdown below.
     *   `[x]` **Phase 2 Code Review** — Performed architectural review, identified data duplication bugs in form retries, fire-and-forget sync vulnerabilities, and React hook dependency issues.
     *   `[x]` **Phase 2 Bug Fixes & Refactoring** — Resolved form retry duplication, refactored usePolling dependencies, consolidated API status/pending polling to App.tsx to eliminate duplicate network queries, updated and verified all 69 unit tests.
+    *   `[x]` **Phase 3: Global Ledger** — Real-time item table on node + SYNC_DUMP on connect + filter/search.
 *   **Pending Tasks**:
-    *   `[ ]` Phase 3: Global Ledger — Real-time item table on node + SYNC_DUMP on connect + filter/search
+    *   `[ ]` Phase 4: Claims Processing — Build claims processing flow and sync claimed status.
 
 ---
 
@@ -101,11 +102,11 @@ This file tracks the historical context, architectural decisions, completed mile
 - `client/src/components/PendingSync.tsx` — offline queue viewer
 - `client/src/App.tsx` — tab navigation shell
 
-### Phase 3: Global Ledger (Pending)
-*   [ ] Real-time item table on node fetching from `GET /api/items`
-*   [ ] Filter by department / status
-*   [ ] Search by item name
-*   [ ] SYNC_DUMP on connect (hub → node)
+### Phase 3: Global Ledger (Complete — 2026-06-08)
+*   [x] Real-time item table on node fetching from `GET /api/items`
+*   [x] Filter by department / status
+*   [x] Search by item name
+*   [x] SYNC_DUMP on connect (hub → node)
 
 ### Phase 4: Claims Processing (Pending)
 *   [ ] Build Process Claim screen
@@ -136,3 +137,9 @@ This file tracks the historical context, architectural decisions, completed mile
     *   Decoupled `ConnectionStatus.tsx` by replacing the `pendingData` response object dependency with a clean `pendingCount` scalar prop.
     *   Deleted 4 orphaned boilerplate assets (`hero.png`, `react.svg`, `vite.svg`, `icons.svg`).
     *   All 78 unit/integration tests successfully run and pass.
+
+### Session: 2026-06-08 (PII Privacy & WebSocket Broadcast Redaction)
+*   **Problem**: In the previous integration, PII details (mobile, id_type, id_number) were leaked to unrelated department nodes during real-time `ITEM_BROADCAST` and `STATUS_UPDATE` broadcasts.
+*   **Decision**: Implemented dynamic PII redaction inside the Hub's `ConnectionManager.broadcastToOthers`. The Hub checks if the recipient node's department name matches the item's `department_origin`. If they do not match, the Hub automatically redacts the PII details of `surrendered_by` and `claimed_by` before sending the payload.
+*   **Fixes**: Merged existing database record fields in the Hub's `STATUS_UPDATE` handler to avoid overwriting item details (like `item_name`) with NULL when status updates are processed.
+*   **Tests**: Added 2 new integration tests to `integration.test.ts` verifying that `ITEM_BROADCAST` and `STATUS_UPDATE` properly redact PII for unrelated department nodes. All 52 Hub server tests and 24 Node server tests compile and pass.

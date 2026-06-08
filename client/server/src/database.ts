@@ -46,7 +46,7 @@ export let db: Database<sqlite3.Database, sqlite3.Statement>;
 export async function initDatabase(
   dbPath?: string
 ): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
-  const resolvedPath = dbPath ?? path.join(path.resolve('data'), 'node.db');
+  const resolvedPath = dbPath ?? process.env.DB_PATH ?? path.join(path.resolve('data'), 'node.db');
   const dataDir = path.dirname(resolvedPath);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });

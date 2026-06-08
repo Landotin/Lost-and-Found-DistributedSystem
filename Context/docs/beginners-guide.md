@@ -131,3 +131,134 @@ This test verifies the fix preventing duplicate person records on form retry.
     *Expected output*:
     `John Doe`
     `Jane Smith` *(Verify it is not listed twice)*
+
+---
+
+### Scenario E: PII Privacy, Dynamic Redaction, and Multi-Node Broadcasts
+This scenario verifies that sensitive PII (mobile, ID type, ID number) is dynamically redacted when an item or status update is broadcast to unrelated department nodes, while remaining fully visible on the originating node and the Central Hub.
+
+#### Step 1: Start the Central Hub
+Ensure the Hub is running on port 5000:
+```bash
+cd "/home/jed/Personal Projects/Lost and Found/server"
+npm run dev
+```
+
+#### Step 2: Start Node 1 (Security) on Port 3001
+Run the Security node with a dedicated database `data/security.db`:
+```bash
+cd "/home/jed/Personal Projects/Lost and Found/client/server"
+PORT=3001 DEPT_NAME=Security DB_PATH=data/security.db DEPT_SECRET=DEPT_SECRET npm run dev
+```
+
+#### Step 3: Start Node 2 (Library) on Port 3002
+In a new terminal window, run the Library node with a separate database `data/library.db` and port 3002:
+```bash
+cd "/home/jed/Personal Projects/Lost and Found/client/server"
+PORT=3002 DEPT_NAME=Library DB_PATH=data/library.db DEPT_SECRET=DEPT_SECRET npm run dev
+```
+
+#### Step 4: Register a Person at Node 1 (Security)
+Send a POST request to create the surrenderer person on the Security node:
+```bash
+curl -X POST http://localhost:3001/api/persons \
+  -H "Content-Type: application/json" \
+  -d '{"full_name": "Alice Miller", "mobile": "+639155554321", "id_type": "Passport", "id_number": "P9876543A"}'
+```
+*Expected response*:
+```json
+{
+  "id": "SOME_PERSON_UUID",
+  "full_name": "Alice Miller",
+  "mobile": "+639155554321",
+  "id_type": "Passport",
+  "id_number": "P9876543A"
+}
+```
+*(Copy the generated `id` UUID from the response to use as `surrendered_by` in the next step).*
+
+#### Step 5: Log a Found Item at Node 1 (Security)
+Create the item on the Security node using the `id` from the previous response:
+```bash
+curl -X POST http://localhost:3001/api/items \
+  -H "Content-Type: application/json" \
+  -d '{"item_name": "Gold Ring", "category": "Jewelry", "status": "found", "surrendered_by": "SOME_PERSON_UUID"}'
+```
+*Expected response*:
+```json
+{
+  "id": "SOME_ITEM_UUID",
+  "item_name": "Gold Ring",
+  "description": null,
+  "category": "Jewelry",
+  "department_origin": "Security",
+  "status": "found",
+  "surrendered_by": "SOME_PERSON_UUID",
+  "synced": 1
+}
+```
+*(Copy the generated item `id` UUID to use in the following steps).*
+
+#### Step 6: Verify PII Retention on Node 1 (Security)
+Query the Security node for the item's details. It should display Alice Miller's full PII because Security is the item's origin department:
+```bash
+curl http://localhost:3001/api/items/SOME_ITEM_UUID
+```
+*Expected output contains*:
+```json
+"surrenderedByPerson": {
+  "id": "SOME_PERSON_UUID",
+  "full_name": "Alice Miller",
+  "mobile": "+639155554321",
+  "id_type": "Passport",
+  "id_number": "P9876543A"
+}
+```
+
+#### Step 7: Verify PII Redaction on Node 2 (Library)
+Query the Library node for the same item. The item will have propagated via the Central Hub, but since Library is an unrelated department, the PII details must be redacted:
+```bash
+curl http://localhost:3002/api/items/SOME_ITEM_UUID
+```
+*Expected output contains*:
+```json
+"surrenderedByPerson": {
+  "id": "SOME_PERSON_UUID",
+  "full_name": "Alice Miller",
+  "mobile": "[REDACTED]",
+  "id_type": "[REDACTED]",
+  "id_number": "[REDACTED]"
+}
+```
+
+#### Step 8: Verify Claim Status Update and Redaction
+Create a claimant person at Node 2 (Library):
+```bash
+curl -X POST http://localhost:3002/api/persons \
+  -H "Content-Type: application/json" \
+  -d '{"full_name": "Bob Jones", "mobile": "+639169998888", "id_type": "Driver License", "id_number": "DL-12345"}'
+```
+*(Copy the generated claimant `id` UUID, e.g., `CLAIMANT_UUID`).*
+
+Now, mark the item as claimed via the Library node:
+```bash
+curl -X PATCH http://localhost:3002/api/items/SOME_ITEM_UUID/status \
+  -H "Content-Type: application/json" \
+  -d '{"status": "claimed", "claimed_by": "CLAIMANT_UUID"}'
+```
+
+Query the Security node (Node 1) to verify that the status update propagated, but Bob Jones' claimant PII details are redacted:
+```bash
+curl http://localhost:3001/api/items/SOME_ITEM_UUID
+```
+*Expected output contains*:
+```json
+"claimedByPerson": {
+  "id": "CLAIMANT_UUID",
+  "full_name": "Bob Jones",
+  "mobile": "[REDACTED]",
+  "id_type": "[REDACTED]",
+  "id_number": "[REDACTED]"
+}
+```
+
