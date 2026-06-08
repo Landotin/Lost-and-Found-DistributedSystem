@@ -26,6 +26,7 @@ vi.mock('./connection-manager.js', () => {
     registerNode = vi.fn();
     removeNode = vi.fn();
     broadcastNodeList = vi.fn();
+    on = vi.fn();
   }
   return {
     ConnectionManager: MockConnectionManager,

@@ -204,4 +204,28 @@ describe('handleConnection — HELLO protocol', () => {
     await new Promise(r => setTimeout(r, 100));
     expect(manager.getNodeCount()).toBe(0);
   });
+
+  it('emits message event on connection manager for subsequent messages after HELLO', async () => {
+    const ws = await createClient(port);
+    ws.send(JSON.stringify({
+      event: 'HELLO',
+      payload: { dept_name: 'CCS', dept_secret: VALID_SECRET },
+    }));
+    await receiveMessage(ws);
+
+    const messagePromise = new Promise<{ socketId: string; message: any }>((resolve) => {
+      manager.on('message', (event: any) => resolve(event));
+    });
+
+    ws.send(JSON.stringify({
+      event: 'ACK',
+      payload: { timestamp: Date.now() },
+    }));
+
+    const received = await messagePromise;
+    expect(received.message.event).toBe('ACK');
+    expect(received.socketId).toBeDefined();
+    ws.close();
+  });
 });
+

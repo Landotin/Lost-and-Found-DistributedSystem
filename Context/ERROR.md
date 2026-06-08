@@ -43,3 +43,12 @@ Below are known high-risk failure modes anticipated during development:
 *   **Alternative if `--bare` ever inherits effortLevel**: Remove `"effortLevel": "high"` from `settings.json` and instead pass it explicitly only for main-session models that support it.
 *   **Status**: Resolved (documented workaround: use Bash + claude -p --bare instead of Agent tool).
 *   **Date**: 2026-06-08
+
+### ERR-004: Heartbeat ACK Ignored
+*   **Component**: Server
+*   **Symptom**: Department nodes connect successfully and complete the `HELLO` handshake but get disconnected by the server's `HeartbeatManager` after ~25 seconds.
+*   **Root Cause**: The socket message listener in `connection-manager.ts` returned early if `helloReceived` was true (`if (helloReceived) return;`), ignoring all post-handshake messages (including `ACK` events sent in response to heartbeats).
+*   **Resolution**: Refactored `handleConnection` to use `socket.once` for the initial `HELLO` message and dynamically register a persistent `'message'` handler after successful verification. The persistent listener emits `'message'` events from `ConnectionManager` (which now extends `EventEmitter`). In `index.ts`, these events are subscribed to, and `'ACK'` events are passed to `heartbeatManager.handleAck(socketId)`.
+*   **Status**: Resolved
+*   **Date**: 2026-06-08
+

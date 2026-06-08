@@ -20,6 +20,7 @@ This file tracks the historical context, architectural decisions, completed mile
     *   `[x]` Created Spec Gatherer instructions file (`Context/tasks/gatherer_instructions.md`) to bootstrap context collection.
     *   `[x]` Phase 1: Bootstrapped backend (`server/`) and frontend (`client/`) workspaces, configured TypeScript, Tailwind CSS v4, and integrated Vitest for TDD execution.
     *   `[x]` **Phase 1: Hub Server Core** — Express + ws server, SQLite schema (persons + items), HELLO protocol with secret validation, NODE_LIST broadcast, HEARTBEAT/ACK mechanism, graceful shutdown. 32 Vitest tests, TypeScript strict mode clean. (Commit range: `a369f1f..b8c786e`)
+    *   `[x]` **Phase 1 Bugfix: Heartbeat ACK Integration** — Resolved issue where post-HELLO messages were ignored by `handleConnection`, preventing node heartbeat acknowledgements (`ACK` events) from being processed. Refactored `ConnectionManager` to inherit from `EventEmitter` and propagate socket messages, wiring `ACK` to `HeartbeatManager.handleAck`. Added integration test and updated Vitest suite (now 33 passing tests).
 *   **Pending Tasks**:
     *   `[ ]` Phase 2: Department Node Frontend & Local DB (React + Vite scaffold, local SQLite, Log Item form, offline queue UI, connection LED)
 
@@ -60,7 +61,8 @@ This file tracks the historical context, architectural decisions, completed mile
 *   [x] Implement HEARTBEAT/ACK mechanism with configurable timeouts
 *   [x] Health endpoint (`GET /health`) returning uptime + node count
 *   [x] Graceful shutdown on SIGTERM/SIGINT
-*   [x] 32 passing Vitest tests, strict TypeScript, code-reviewed
+*   [x] 33 passing Vitest tests, strict TypeScript, code-reviewed
+*   [x] Bugfix: Handle post-HELLO messages and wire WS ACK events to HeartbeatManager (resolves ERR-004)
 
 **Files delivered:**
 - `server/src/index.ts` — Express entry point, server lifecycle

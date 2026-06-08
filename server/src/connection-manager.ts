@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
 
 export interface ConnectedNode {
@@ -27,10 +28,11 @@ export interface WsMessage {
   payload?: unknown;
 }
 
-export class ConnectionManager {
+export class ConnectionManager extends EventEmitter {
   private nodes: Map<string, ConnectedNode> = new Map();
 
   constructor(_wss: WebSocketServer, _validSecret: string) {
+    super();
     // _wss and _validSecret reserved for future use (admin broadcast, re-auth)
   }
 
@@ -96,12 +98,7 @@ export function handleConnection(
       socket.close(4002, 'Timeout waiting for HELLO');
     }, 5000);
 
-    let helloReceived = false;
-
-    socket.on('message', (data: Buffer) => {
-      if (helloReceived) return;
-      helloReceived = true;
-
+    socket.once('message', (data: Buffer) => {
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = null;
@@ -132,8 +129,20 @@ export function handleConnection(
         return;
       }
 
-      manager.registerNode(socket, payload.dept_name);
+      const node = manager.registerNode(socket, payload.dept_name);
       manager.broadcastNodeList();
+
+      // Setup persistent listener for subsequent messages
+      socket.on('message', (postHelloData: Buffer) => {
+        try {
+          const postHelloParsed = JSON.parse(postHelloData.toString()) as WsMessage;
+          if (postHelloParsed && typeof postHelloParsed === 'object' && typeof postHelloParsed.event === 'string') {
+            manager.emit('message', { socketId: node.socketId, message: postHelloParsed });
+          }
+        } catch {
+          // Ignore parsing errors for robust handling
+        }
+      });
     });
 
     socket.on('close', () => {

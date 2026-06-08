@@ -65,6 +65,15 @@ export async function startServer(): Promise<http.Server> {
     }
   });
 
+  // Wire message events from connection manager to heartbeat manager
+  manager.on('message', ({ socketId, message }: { socketId: string; message: any }) => {
+    if (message.event === 'ACK') {
+      if (heartbeatManager) {
+        heartbeatManager.handleAck(socketId);
+      }
+    }
+  });
+
   // 8. Wire connection events to heartbeat (addNode on connect, removeNode on disconnect)
   const origRegisterNode = manager.registerNode.bind(manager);
   manager.registerNode = (socket, deptName) => {
