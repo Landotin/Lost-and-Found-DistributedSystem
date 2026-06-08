@@ -80,4 +80,15 @@ describe('Database Module', () => {
       )
     ).rejects.toThrow();
   });
+
+  it('enforces foreign key constraints on surrendered_by', async () => {
+    // Insert with a non-existent person reference — must be rejected
+    await expect(
+      db.run(
+        `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        'test-fk-1', 'Test FK Item', null, null, 'TestDept', 'found', 'nonexistent-person-id'
+      )
+    ).rejects.toThrow();
+  });
 });
