@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
-/dist
-/build
+dist/
+build/
 
 # Local Environment/Secrets
 .env
@@ -28,4 +28,5 @@ Thumbs.db
 # Agent Helper Scripts (containing API keys)
 *.sh
 start-*.sh
+!.claude/skills/*.sh
 /Context/SPECS_GATHERED.md
