@@ -22,6 +22,10 @@ export interface Item {
   synced: number;
   updated_at?: string;
   created_at?: string;
+  /** Expanded person record for surrendered_by (fetched from /api/items/:id) */
+  surrenderedByPerson?: Person;
+  /** Expanded person record for claimed_by (fetched from /api/items/:id) */
+  claimedByPerson?: Person;
 }
 
 export interface StatusResponse {

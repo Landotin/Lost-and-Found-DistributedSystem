@@ -1,0 +1,23 @@
+[2026-06-08 21:05] Phase 3: Global Ledger — Implementation complete
+- Extended Item type in types.ts with optional surrenderedByPerson and claimedByPerson fields
+- Created GlobalLedger.tsx component with:
+  - Loading, error, and empty states
+  - Search input filtering by item name (case-insensitive)
+  - Status filter dropdown (All, lost, found, claimed)
+  - Department filter dropdown (All + distinct departments from items)
+  - Table display with Item Name, Category, Origin Department, Status badge, Date Logged
+  - Detail modal on row click showing full item details
+  - PII masking: when department_origin != current deptName, mobile and ID details show [REDACTED]
+- Updated App.tsx:
+  - Added 'ledger' tab as the default active tab
+  - Added items polling via fetchItems at 5000ms interval
+  - Renders GlobalLedger component in ledger tab
+- Wrote GlobalLedger.test.tsx with 17 tests covering:
+  - Loading state, error state, empty state
+  - Table headers and item rendering
+  - Search filtering (case-insensitive)
+  - Status filter, department filter
+  - Modal open/close
+  - PII masking/unmasking for surrendered_by and claimed_by
+- Updated App.test.tsx for 3-tab navigation and ledger as default
+- All 86 tests passing (10 test files)
