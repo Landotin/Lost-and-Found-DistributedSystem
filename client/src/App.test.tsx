@@ -25,6 +25,12 @@ function mockFetch(url: string) {
       json: () => Promise.resolve({ count: 0, items: [] }),
     });
   }
+  if (url === '/api/items') {
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+  }
   return Promise.resolve({
     ok: true,
     json: () => Promise.resolve({}),
@@ -46,15 +52,16 @@ describe('App Component', () => {
     expect(screen.getByRole('heading', { name: /Lost & Found Tracker/i })).toBeInTheDocument();
   });
 
-  it('renders tab navigation with both tabs', () => {
+  it('renders tab navigation with three tabs', () => {
     render(<App />);
+    expect(screen.getByRole('tab', { name: /global ledger/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /log item/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /pending sync/i })).toBeInTheDocument();
   });
 
-  it('defaults to Log Item tab (aria-selected="true")', () => {
+  it('defaults to Global Ledger tab (aria-selected="true")', () => {
     render(<App />);
-    const logItemTab = screen.getByRole('tab', { name: /log item/i });
-    expect(logItemTab).toHaveAttribute('aria-selected', 'true');
+    const ledgerTab = screen.getByRole('tab', { name: /global ledger/i });
+    expect(ledgerTab).toHaveAttribute('aria-selected', 'true');
   });
 });
