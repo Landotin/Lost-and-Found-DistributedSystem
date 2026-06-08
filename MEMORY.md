@@ -68,7 +68,7 @@ This file tracks the historical context, architectural decisions, completed mile
 - `server/src/connection-manager.ts` — Connection registry, HELLO handler, NODE_LIST broadcast
 - `server/src/heartbeat.ts` — HeartbeatManager (EventEmitter), ping/ACK timeout detection
 
-**Known subagent issue (ERR-003):** Worker subagents failed with API error `thinking options type cannot be disabled when reasoning_effort is set` when using `deepseek-v4-flash` model from agent definitions. Implementation fell back to inline execution. Fix before Phase 2: switch agent model to `sonnet` or `haiku`, or investigate model compatibility with high-effort session setting.
+**Known subagent issue (ERR-003):** The `Agent` tool cannot spawn subagents because `effortLevel: "high"` in settings.json injects `reasoning_effort` into API calls, which DeepSeek's endpoint rejects. `claude -p --bare` from Bash works correctly (fresh session, no effortLevel inheritance). All agent model defs use `deepseek-v4-flash` (worker/spec-gatherer/code-reviewer) or `deepseek-v4-pro[1m]` (planner) — these are correct and must NOT be changed to Anthropic models. For Phase 2+, spawn workers via `Bash` + `run-headless-worker.sh` (now fixed with NVM sourcing).
 
 ### Phase 2: Department Node Frontend & Local DB (Pending)
 *   [ ] Bootstrap React + TypeScript + Vite + Tailwind client app

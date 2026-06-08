@@ -33,10 +33,13 @@ Below are known high-risk failure modes anticipated during development:
 *   **Symptom**: A recently reconnected node floods the WebSocket server with concurrent `SYNC_QUEUE_FLUSH` messages, causing lag or buffer overflow.
 *   **Mitigation**: Implement batching for queue flushes or throttle outbound websocket frame releases during reconnect states.
 
-### ERR-003: Subagent API Model Compatibility Failure (Resolved with Workaround)
+### ERR-003: Subagent / Agent Tool Failure with DeepSeek + High Effort (Resolved)
+
 *   **Component**: Agent Orchestration / Claude Code API
-*   **Symptom**: All subagent spawns (worker, spec-gatherer) fail immediately with HTTP 400: `thinking options type cannot be disabled when reasoning_effort is set`. Occurs when the main session uses Opus 4.8 with high effort and the agent definition YAML specifies `model: deepseek-v4-flash`.
-*   **Root Cause**: The deepseek model does not support the `reasoning_effort` parameter being set (or unset) in the same way as Anthropic models. The main session's high-effort setting conflicts with the agent's model configuration.
-*   **Resolution (Workaround)**: Manually implemented all Phase 1 code inline rather than via subagent spawning. For future phases, either: (a) change agent model to `sonnet` or `haiku` in `.claude/agents/*.md`, or (b) run workers in separate terminal sessions with independent model settings via `claude -p --model sonnet`.
-*   **Status**: Resolved (workaround applied). Permanent fix deferred to agent config review before Phase 2.
+*   **Symptom**: All Agent tool spawns (worker, spec-gatherer, code-reviewer) fail immediately with HTTP 400: `thinking options type cannot be disabled when reasoning_effort is set`. Occurs when the main session uses `effortLevel: "high"` and subagents use DeepSeek models (the only models available — no Anthropic Pro plan).
+*   **Root Cause**: `effortLevel: "high"` in `settings.json` injects `reasoning_effort` into every API request. The Agent tool passes this parameter through to subagent model calls. DeepSeek's Anthropic-compatible API endpoint (`api.deepseek.com/anthropic`) rejects `reasoning_effort` — their models don't support Anthropic's extended thinking parameter.
+*   **Why `claude -p` works but Agent tool doesn't**: `claude -p --bare` starts a fresh session from the shell — it doesn't inherit the parent session's `effortLevel`. The Agent tool spawns subagents within the same session context, so they inherit the conflicting parameter.
+*   **Resolution**: For Phase 1, implemented all code inline (no subagents). For Phase 2+, use `Bash` to invoke `claude -p --bare --model deepseek-v4-flash` from properly NVM-sourced shells. The `run-headless-worker.sh` script has been updated to source NVM and use `--bare` mode. The Agent tool is **not usable** with this configuration — always use `Bash` + `claude -p` for spawning workers.
+*   **Alternative if `--bare` ever inherits effortLevel**: Remove `"effortLevel": "high"` from `settings.json` and instead pass it explicitly only for main-session models that support it.
+*   **Status**: Resolved (documented workaround: use Bash + claude -p --bare instead of Agent tool).
 *   **Date**: 2026-06-08
