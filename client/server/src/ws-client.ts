@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { getPendingSyncItems, markItemSynced } from './database.js';
+import { getPendingSyncItems, getPersonById, markItemSynced } from './database.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -256,16 +256,25 @@ export class WsClientManager extends EventEmitter {
     const pending = await getPendingSyncItems();
     if (pending.length === 0) return;
 
-    const batch = pending.map((item) => ({
-      id: item.id,
-      item_name: item.item_name,
-      description: item.description,
-      category: item.category,
-      department_origin: item.department_origin,
-      status: item.status,
-      surrendered_by: item.surrendered_by,
-      created_at: item.created_at,
-    }));
+    // For each pending item, fetch the full surrenderer person details
+    const batch = await Promise.all(
+      pending.map(async (item) => {
+        let surrenderedByPerson = null;
+        if (item.surrendered_by) {
+          surrenderedByPerson = await getPersonById(item.surrendered_by);
+        }
+        return {
+          id: item.id,
+          item_name: item.item_name,
+          description: item.description,
+          category: item.category,
+          department_origin: item.department_origin,
+          status: item.status,
+          surrendered_by: surrenderedByPerson, // full person object or null
+          created_at: item.created_at,
+        };
+      })
+    );
 
     this.send('SYNC_QUEUE_FLUSH', { items: batch });
 

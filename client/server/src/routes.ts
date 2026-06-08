@@ -143,6 +143,12 @@ export function createApiRouter(
 
       // If online, broadcast to hub immediately
       if (isConnected) {
+        // Fetch full surrenderer person details
+        let surrenderedByPerson: Person | null = null;
+        if (item.surrendered_by) {
+          surrenderedByPerson = await getPersonById(item.surrendered_by);
+        }
+
         wsManager.send('ITEM_BROADCAST', {
           id: item.id,
           item_name: item.item_name,
@@ -150,7 +156,7 @@ export function createApiRouter(
           category: item.category,
           department_origin: item.department_origin,
           status: item.status,
-          surrendered_by: item.surrendered_by,
+          surrendered_by: surrenderedByPerson, // full person object or null
           created_at: item.created_at ?? new Date().toISOString(),
         });
       }
@@ -188,10 +194,16 @@ export function createApiRouter(
 
       // Broadcast status update if online
       if (wsManager.connectionStatus === 'connected') {
+        // Fetch full claimant person details
+        let claimedByPerson: Person | null = null;
+        if (claimed_by) {
+          claimedByPerson = await getPersonById(claimed_by);
+        }
+
         wsManager.send('STATUS_UPDATE', {
           id: req.params.id,
           status,
-          claimed_by: claimed_by ?? null,
+          claimed_by: claimedByPerson, // full person object or null
           updated_at: new Date().toISOString(),
         });
       }
