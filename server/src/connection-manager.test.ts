@@ -143,12 +143,34 @@ describe('handleConnection — HELLO protocol', () => {
 
   it('accepts valid HELLO message and registers node', async () => {
     const ws = await createClient(port);
+    const messages: any[] = [];
+    ws.on('message', (data) => {
+      messages.push(JSON.parse(data.toString()));
+    });
+
     ws.send(JSON.stringify({
       event: 'HELLO',
       payload: { dept_name: 'CCS', dept_secret: VALID_SECRET },
     }));
-    const msg = await receiveMessage(ws) as { event: string; payload: unknown };
-    expect(msg.event).toBe('NODE_LIST');
+
+    // Wait for 2 messages to arrive
+    await new Promise<void>((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        if (messages.length >= 2) {
+          clearInterval(interval);
+          resolve();
+        } else if (Date.now() - start > 4000) {
+          clearInterval(interval);
+          reject(new Error(`Timeout waiting for 2 messages. Received: ${JSON.stringify(messages)}`));
+        }
+      }, 50);
+    });
+
+    expect(messages[0].event).toBe('HELLO');
+    expect(messages[0].payload.accepted).toBe(true);
+
+    expect(messages[1].event).toBe('NODE_LIST');
     expect(manager.getNodeCount()).toBe(1);
     ws.close();
   });

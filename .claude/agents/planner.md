@@ -1,8 +1,12 @@
 ---
 name: planner
 description: Analyzes structural specs and runs background automated scripts to spin up parallel worker environments. Use this to fully automate the pipeline.
-tools: [Read, Write, Edit, Bash]
-model: deepseek-v4-pro[1m]
+tools: 
+  - Read
+  - Write
+  - Edit
+  - Bash
+model: deepseek-v4-pro
 ---
 You are the Executive Architect. 
 When the user gives you a requirement:

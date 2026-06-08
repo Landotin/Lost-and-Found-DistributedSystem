@@ -130,6 +130,13 @@ export function handleConnection(
       }
 
       const node = manager.registerNode(socket, payload.dept_name);
+
+      // Reply with HELLO accepted
+      socket.send(JSON.stringify({
+        event: 'HELLO',
+        payload: { accepted: true },
+      }));
+
       manager.broadcastNodeList();
 
       // Setup persistent listener for subsequent messages

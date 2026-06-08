@@ -52,3 +52,25 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-08
 
+### ERR-005: Component Test Failures Post-Polling Refactoring
+*   **Component**: Client (Frontend Unit Tests)
+*   **Symptom**: `ConnectionStatus.test.tsx` and `PendingSync.test.tsx` tests fail after refactoring state polling.
+*   **Root Cause**: Polling was lifted from these components to the parent `App.tsx` and passed down as props, which meant calling `render(<ConnectionStatus />)` or `render(<PendingSync />)` without props in tests resulted in empty renders and ignored mock `usePolling` functions.
+*   **Resolution**: Updated unit tests to pass mocked props (`statusData`, `pendingData`, `loading`, `error`) directly to the components rather than mocking the internal `usePolling` hook.
+*   **Status**: Resolved
+*   **Date**: 2026-06-08
+
+### ERR-006: Node Sync Queue Stuck in Pending (Casing Mismatch and Missing HELLO response)
+*   **Component**: Client / Server
+*   **Symptom**: Nodes connect to the hub but the status shows disconnected/connecting and pending sync queue items are never flushed (status remains pending/0).
+*   **Root Cause**: Two matching issues:
+    1. Key Casing Mismatch: The WebSocket client in `ws-client.ts` sent `HELLO` payload with camelCase keys (`deptName`, `deptSecret`), but the Hub connection manager in `connection-manager.ts` expected snake_case keys (`dept_name`, `dept_secret`), causing the Hub to immediately close the connection with code 4001.
+    2. Missing HELLO response: Even if the keys matched, the Hub never responded with a `HELLO` event message (e.g. `{ event: "HELLO", payload: { accepted: true } }`) to confirm successful authentication. The client requires this message to transition its state to `'connected'` and call `flushSyncQueue()`.
+*   **Resolution**:
+    1. Updated `ws-client.ts` to send snake_case keys (`dept_name`, `dept_secret`) in the `HELLO` handshake.
+    2. Updated `connection-manager.ts` to send a `HELLO` acceptance response to the client after registration.
+    3. Updated the server tests in `connection-manager.test.ts` to expect the `HELLO` message first, followed by `NODE_LIST`.
+*   **Status**: Resolved
+*   **Date**: 2026-06-08
+
+
