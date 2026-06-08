@@ -61,6 +61,7 @@ export async function startServer(): Promise<http.Server> {
   heartbeatManager.on('node_timeout', ({ socketId }: { socketId: string }) => {
     if (manager) {
       manager.removeNode(socketId);
+      manager.broadcastNodeList();
     }
   });
 
@@ -82,7 +83,10 @@ export async function startServer(): Promise<http.Server> {
     }
   };
 
-  // 9. Listen on PORT
+  // 9. Start heartbeat pings
+  heartbeatManager.start();
+
+  // 10. Listen on PORT
   return new Promise<http.Server>((resolve, reject) => {
     server!.listen(PORT, () => {
       // 10. Log

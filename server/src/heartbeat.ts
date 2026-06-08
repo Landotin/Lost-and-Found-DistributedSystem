@@ -131,9 +131,8 @@ export class HeartbeatManager extends EventEmitter {
             payload: { timestamp },
           }),
         );
+        node.lastPingSent = timestamp;
       }
-
-      node.lastPingSent = timestamp;
     }
   }
 

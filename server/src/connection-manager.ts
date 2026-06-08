@@ -29,12 +29,9 @@ export interface WsMessage {
 
 export class ConnectionManager {
   private nodes: Map<string, ConnectedNode> = new Map();
-  private wss: WebSocketServer;
-  private validSecret: string;
 
-  constructor(wss: WebSocketServer, validSecret: string) {
-    this.wss = wss;
-    this.validSecret = validSecret;
+  constructor(_wss: WebSocketServer, _validSecret: string) {
+    // _wss and _validSecret reserved for future use (admin broadcast, re-auth)
   }
 
   getConnectedNodes(): ConnectedNode[] {

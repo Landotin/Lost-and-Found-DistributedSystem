@@ -57,8 +57,11 @@ export async function initDatabase(
     driver: sqlite3.Database,
   });
 
-  // Enable WAL mode
+  // Enable WAL mode for concurrent access
   await database.exec('PRAGMA journal_mode=WAL;');
+
+  // Enforce foreign key constraints
+  await database.exec('PRAGMA foreign_keys = ON;');
 
   // Create tables
   await database.exec(`
