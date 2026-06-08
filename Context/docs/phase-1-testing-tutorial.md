@@ -26,7 +26,7 @@ npm test
 You should see:
 ```
 Test Files  4 passed (4)
-     Tests  32 passed (32)
+     Tests  33 passed (33)
 ```
 
 If any fail, stop here and investigate before proceeding.
@@ -214,6 +214,6 @@ curl http://localhost:5000/health
 | Node timeout detection | Node removed after 2 missed ACKs |
 | Graceful shutdown | Clean exit on Ctrl+C |
 | Type safety | `tsc --noEmit` passes |
-| Test suite | 32/32 Vitest tests pass |
+| Test suite | 33/33 Vitest tests pass |
 
 If you hit any issues, check `Context/ERROR.md` for known problems and workarounds.
