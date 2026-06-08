@@ -2,7 +2,7 @@
 name: worker
 description: Core implementation agent. Use this inside isolated Git Worktrees to write functional features, implement unit tests, and resolve backend or frontend task contracts.
 tools: [Read, Edit, Write, Bash, Grep, Glob]
-model: deepseek-v4-flash
+model: sonnet
 memory: project
 ---
 # ROLE

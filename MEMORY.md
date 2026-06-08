@@ -7,8 +7,7 @@ This file tracks the historical context, architectural decisions, completed mile
 ## 0. Active Session Status
 
 *   **Task Compile**: Configuration of agentic coding environment files (`AGENTS.md`, `MEMORY.md`, `Context/ERROR.md`) and establishing local documentation references (`Context/docs/best-practices.md`) for Express, WebSockets (`ws`), and SQLite.
-*   **Current Task**:
-    *   `[ ]` Phase 1: Configure backend database and websocket server.
+*   **Current Task**: None (Phase 1 complete). Ready for Phase 2: Department Node Frontend.
 *   **Completed Tasks**:
     *   `[x]` Reviewed and corrected custom agent configurations in `.claude/agents/` (corrected tool names to standard Claude Code conventions and moved `code-reviewer.md` to `agents/` directory).
     *   `[x]` PRD alignment checks.
@@ -20,8 +19,9 @@ This file tracks the historical context, architectural decisions, completed mile
     *   `[x]` Created root `.gitignore` to prevent secret leaks, local databases, and temporary agent scripts from being committed.
     *   `[x]` Created Spec Gatherer instructions file (`Context/tasks/gatherer_instructions.md`) to bootstrap context collection.
     *   `[x]` Phase 1: Bootstrapped backend (`server/`) and frontend (`client/`) workspaces, configured TypeScript, Tailwind CSS v4, and integrated Vitest for TDD execution.
+    *   `[x]` **Phase 1: Hub Server Core** — Express + ws server, SQLite schema (persons + items), HELLO protocol with secret validation, NODE_LIST broadcast, HEARTBEAT/ACK mechanism, graceful shutdown. 32 Vitest tests, TypeScript strict mode clean. (Commit range: `a369f1f..b8c786e`)
 *   **Pending Tasks**:
-    *   `[ ]` Phase 1: Configure backend database and websocket server.
+    *   `[ ]` Phase 2: Department Node Frontend & Local DB (React + Vite scaffold, local SQLite, Log Item form, offline queue UI, connection LED)
 
 ---
 
@@ -50,11 +50,25 @@ This file tracks the historical context, architectural decisions, completed mile
 *   [x] Establish PRD (v2.0)
 *   [x] Set up Agent Coding Environment Files (`AGENTS.md`, `MEMORY.md`, `Context/ERROR.md`)
 
-### Phase 1: Hub Server Core (Pending)
-*   [ ] Initialize node project & Express server
-*   [ ] Configure WebSocket Server broker (`ws`)
-*   [ ] Create Hub SQLite database schema
-*   [ ] Implement `HELLO` protocol validation & `NODE_LIST` broadcast
+### Phase 1: Hub Server Core (Complete — 2026-06-08)
+*   [x] Initialize Node.js Express server with CORS + JSON middleware
+*   [x] Configure WebSocket Server broker (`ws`) sharing HTTP port
+*   [x] Create Hub SQLite database schema (`persons` + `items` tables)
+*   [x] Enable WAL mode and foreign key enforcement
+*   [x] Implement `HELLO` protocol validation (secret check, timeout, reject codes)
+*   [x] Implement `NODE_LIST` broadcast on connect/disconnect/timeout
+*   [x] Implement HEARTBEAT/ACK mechanism with configurable timeouts
+*   [x] Health endpoint (`GET /health`) returning uptime + node count
+*   [x] Graceful shutdown on SIGTERM/SIGINT
+*   [x] 32 passing Vitest tests, strict TypeScript, code-reviewed
+
+**Files delivered:**
+- `server/src/index.ts` — Express entry point, server lifecycle
+- `server/src/database.ts` — SQLite init, schema, type definitions
+- `server/src/connection-manager.ts` — Connection registry, HELLO handler, NODE_LIST broadcast
+- `server/src/heartbeat.ts` — HeartbeatManager (EventEmitter), ping/ACK timeout detection
+
+**Known subagent issue (ERR-003):** Worker subagents failed with API error `thinking options type cannot be disabled when reasoning_effort is set` when using `deepseek-v4-flash` model from agent definitions. Implementation fell back to inline execution. Fix before Phase 2: switch agent model to `sonnet` or `haiku`, or investigate model compatibility with high-effort session setting.
 
 ### Phase 2: Department Node Frontend & Local DB (Pending)
 *   [ ] Bootstrap React + TypeScript + Vite + Tailwind client app
