@@ -95,3 +95,165 @@ export async function initDatabase(
   db = database;
   return database;
 }
+
+// ---------------------------------------------------------------------------
+// savePerson – Insert or ignore the person into the persons table
+// ---------------------------------------------------------------------------
+
+export async function savePerson(person: Person): Promise<void> {
+  await db.run(
+    `INSERT OR IGNORE INTO persons (id, full_name, mobile, id_type, id_number, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    person.id,
+    person.full_name,
+    person.mobile ?? null,
+    person.id_type ?? null,
+    person.id_number ?? null,
+    person.created_at ?? new Date().toISOString(),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// saveItem – Upsert with LWW (last-writer-wins) conflict resolution
+// ---------------------------------------------------------------------------
+
+export async function saveItem(item: Item): Promise<void> {
+  // First check if the item already exists
+  const existing = await db.get<{ updated_at: string; created_at: string }>(
+    'SELECT updated_at, created_at FROM items WHERE id = ?',
+    item.id,
+  );
+
+  if (existing) {
+    // Determine timestamps for LWW comparison
+    const incomingTs = item.updated_at ?? item.created_at ?? '';
+    const existingTs = existing.updated_at ?? existing.created_at ?? '';
+
+    // Only update if incoming timestamp is strictly newer
+    if (incomingTs > existingTs) {
+      await db.run(
+        `UPDATE items SET
+           item_name = ?,
+           description = ?,
+           category = ?,
+           department_origin = ?,
+           status = ?,
+           surrendered_by = ?,
+           claimed_by = ?,
+           claimed_at = ?,
+           synced = ?,
+           updated_at = ?,
+           created_at = ?
+         WHERE id = ?`,
+        item.item_name,
+        item.description ?? null,
+        item.category ?? null,
+        item.department_origin,
+        item.status,
+        item.surrendered_by ?? null,
+        item.claimed_by ?? null,
+        item.claimed_at ?? null,
+        item.synced ?? null,
+        item.updated_at ?? new Date().toISOString(),
+        item.created_at ?? null,
+        item.id,
+      );
+    }
+    // If incoming is older or equal, do nothing (existing wins)
+  } else {
+    // Insert new item
+    await db.run(
+      `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by, claimed_by, claimed_at, synced, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      item.id,
+      item.item_name,
+      item.description ?? null,
+      item.category ?? null,
+      item.department_origin,
+      item.status,
+      item.surrendered_by ?? null,
+      item.claimed_by ?? null,
+      item.claimed_at ?? null,
+      item.synced ?? null,
+      item.updated_at ?? new Date().toISOString(),
+      item.created_at ?? new Date().toISOString(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SyncDumpItem – Shape returned by getSyncDumpForNode
+// ---------------------------------------------------------------------------
+
+export interface SyncDumpItem {
+  id: string;
+  item_name: string;
+  description: string | null;
+  category: string | null;
+  department_origin: string;
+  status: string;
+  surrendered_by: string | null;
+  claimed_by: string | null;
+  claimed_at: string | null;
+  synced: number | null;
+  updated_at: string | null;
+  created_at: string | null;
+  // Surrenderer details
+  surrenderer_full_name: string | null;
+  surrenderer_mobile: string | null;
+  surrenderer_id_type: string | null;
+  surrenderer_id_number: string | null;
+  // Claimant details
+  claimant_full_name: string | null;
+  claimant_mobile: string | null;
+  claimant_id_type: string | null;
+  claimant_id_number: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// getSyncDumpForNode – Fetch all items with person details, redacting PII
+// ---------------------------------------------------------------------------
+
+export async function getSyncDumpForNode(deptName: string): Promise<SyncDumpItem[]> {
+  const rows = await db.all<SyncDumpItem[]>(
+    `SELECT
+       i.id,
+       i.item_name,
+       i.description,
+       i.category,
+       i.department_origin,
+       i.status,
+       i.surrendered_by,
+       i.claimed_by,
+       i.claimed_at,
+       i.synced,
+       i.updated_at,
+       i.created_at,
+       s.full_name AS surrenderer_full_name,
+       s.mobile     AS surrenderer_mobile,
+       s.id_type    AS surrenderer_id_type,
+       s.id_number  AS surrenderer_id_number,
+       c.full_name  AS claimant_full_name,
+       c.mobile     AS claimant_mobile,
+       c.id_type    AS claimant_id_type,
+       c.id_number  AS claimant_id_number
+     FROM items i
+     LEFT JOIN persons s ON s.id = i.surrendered_by
+     LEFT JOIN persons c ON c.id = i.claimed_by
+     ORDER BY i.created_at ASC`,
+  );
+
+  // Redact PII for items that don't originate from the requesting department
+  for (const row of rows) {
+    if (row.department_origin !== deptName) {
+      row.surrenderer_mobile = '[REDACTED]';
+      row.surrenderer_id_type = '[REDACTED]';
+      row.surrenderer_id_number = '[REDACTED]';
+      row.claimant_mobile = '[REDACTED]';
+      row.claimant_id_type = '[REDACTED]';
+      row.claimant_id_number = '[REDACTED]';
+    }
+  }
+
+  return rows;
+}

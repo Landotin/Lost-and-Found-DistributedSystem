@@ -86,6 +86,20 @@ export class ConnectionManager extends EventEmitter {
       }
     }
   }
+
+  /**
+   * Send a WebSocket message to all connected department nodes
+   * except the one identified by senderSocketId.
+   */
+  broadcastToOthers(senderSocketId: string, event: string, payload: unknown): void {
+    const data = JSON.stringify({ event, payload } satisfies WsMessage);
+
+    for (const [id, node] of this.nodes) {
+      if (id !== senderSocketId && node.socket.readyState === WebSocket.OPEN) {
+        node.socket.send(data);
+      }
+    }
+  }
 }
 
 export function handleConnection(
@@ -138,6 +152,13 @@ export function handleConnection(
       }));
 
       manager.broadcastNodeList();
+
+      // Emit registered event so the hub can send SYNC_DUMP
+      manager.emit('registered', {
+        socketId: node.socketId,
+        deptName: node.deptName,
+        socket,
+      });
 
       // Setup persistent listener for subsequent messages
       socket.on('message', (postHelloData: Buffer) => {
