@@ -195,11 +195,13 @@ export class WsClientManager extends EventEmitter {
     this.clearTimers();
     this.heartbeatInterval = setInterval(() => {
       this.send('HEARTBEAT', {});
-      // Set a timeout for the ACK response
-      this.heartbeatTimeout = setTimeout(() => {
-        console.warn('[WS-Client] Heartbeat ACK timeout — reconnecting');
-        this.handleDisconnect();
-      }, HEARTBEAT_TIMEOUT_MS);
+      // Set a timeout for the ACK response, unless one is already pending
+      if (!this.heartbeatTimeout) {
+        this.heartbeatTimeout = setTimeout(() => {
+          console.warn('[WS-Client] Heartbeat ACK timeout — reconnecting');
+          this.handleDisconnect();
+        }, HEARTBEAT_TIMEOUT_MS);
+      }
     }, HEARTBEAT_INTERVAL_MS);
   }
 

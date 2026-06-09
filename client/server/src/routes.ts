@@ -139,6 +139,14 @@ export function createApiRouter(
         return;
       }
 
+      if (surrendered_by) {
+        const surrenderer = await getPersonById(surrendered_by);
+        if (!surrenderer) {
+          res.status(400).json({ error: 'Surrenderer person not found' });
+          return;
+        }
+      }
+
       const isConnected = wsManager.connectionStatus === 'connected';
 
       const item: Item = {
@@ -211,9 +219,16 @@ export function createApiRouter(
         return;
       }
 
-      if (status === 'claimed' && !claimed_by) {
-        res.status(400).json({ error: 'claimed_by is required when status is "claimed"' });
-        return;
+      if (status === 'claimed') {
+        if (!claimed_by) {
+          res.status(400).json({ error: 'claimed_by is required when status is "claimed"' });
+          return;
+        }
+        const claimant = await getPersonById(claimed_by);
+        if (!claimant) {
+          res.status(400).json({ error: 'Claimant person not found' });
+          return;
+        }
       }
 
       await updateItemStatus(req.params.id, status as ItemStatus, claimed_by);

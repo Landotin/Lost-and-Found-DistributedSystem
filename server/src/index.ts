@@ -20,7 +20,7 @@ let heartbeatManager: HeartbeatManager | null = null;
 let startTime = Date.now();
 
 // Health endpoint (defined once at module level)
-app.get('/health', (_req, res) => {
+app.get(['/health', '/api/health'], (_req, res) => {
   res.json({
     status: 'ok',
     uptime: (Date.now() - startTime) / 1000,

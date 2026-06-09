@@ -131,6 +131,9 @@ cleanup() {
   kill "$HUB_PID" 2>/dev/null || true
   kill "$SEC_PID" 2>/dev/null || true
   kill "$ENG_PID" 2>/dev/null || true
+  lsof -ti":$HUB_PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+  lsof -ti":$SEC_PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+  lsof -ti":$ENG_PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
   wait "$HUB_PID" 2>/dev/null || true
   wait "$SEC_PID" 2>/dev/null || true
   wait "$ENG_PID" 2>/dev/null || true
@@ -147,16 +150,16 @@ info "SETUP: Preparing fresh databases"
 
 # Kill any existing processes on our ports
 for port in "$HUB_PORT" "$SEC_PORT" "$ENG_PORT"; do
-  lsof -ti":$port" 2>/dev/null | xargs kill 2>/dev/null || true
+  lsof -ti":$port" 2>/dev/null | xargs kill -9 2>/dev/null || true
 done
 sleep 1
 
-# Note: For a truly clean test, manually delete old databases:
-#   rm -f server/data/hub.db* client/server/data/*.db* client/server/data/*.db-* client/server/lost_found_node.db
-# The servers below will create fresh tables (IF NOT EXISTS) using existing data.
+# Delete old databases to guarantee a clean starting state
+rm -rf "$DATA_DIR"
+mkdir -p "$DATA_DIR"
 
 info "SETUP: Starting Hub server (port ${HUB_PORT})"
-ADMIN_SECRET="$ADMIN_SECRET" PORT="$HUB_PORT" \
+ADMIN_SECRET="$ADMIN_SECRET" PORT="$HUB_PORT" DB_PATH="$DATA_DIR/hub.db" \
   npx tsx "$(pwd)/server/src/index.ts" &
 HUB_PID=$!
 sleep 3
@@ -169,13 +172,13 @@ fi
 echo "  Hub started (PID: $HUB_PID)"
 
 info "SETUP: Starting Security node (port ${SEC_PORT})"
-DEPT_NAME=Security DEPT_SECRET="$ADMIN_SECRET" SERVER_WS_URL="ws://localhost:${HUB_PORT}" PORT="$SEC_PORT" \
+DEPT_NAME=Security DEPT_SECRET="$ADMIN_SECRET" SERVER_WS_URL="ws://localhost:${HUB_PORT}" PORT="$SEC_PORT" DB_PATH="$DATA_DIR/security.db" \
   npx tsx "$(pwd)/client/server/src/index.ts" &
 SEC_PID=$!
 sleep 3
 
 info "SETUP: Starting Engineering node (port ${ENG_PORT})"
-DEPT_NAME=Engineering DEPT_SECRET="$ADMIN_SECRET" SERVER_WS_URL="ws://localhost:${HUB_PORT}" PORT="$ENG_PORT" \
+DEPT_NAME=Engineering DEPT_SECRET="$ADMIN_SECRET" SERVER_WS_URL="ws://localhost:${HUB_PORT}" PORT="$ENG_PORT" DB_PATH="$DATA_DIR/engineering.db" \
   npx tsx "$(pwd)/client/server/src/index.ts" &
 ENG_PID=$!
 sleep 3
@@ -717,6 +720,118 @@ if [ "$HEALTH_NODES" -ge 2 ]; then
   pass "Hub reports nodeCount=$HEALTH_NODES (≥2)"
 else
   fail "Hub reports nodeCount=$HEALTH_NODES (expected ≥2)"
+fi
+
+header "E.8 Claim Validation & Referencing (ERR-013)"
+# Create a found item
+ITEM_RES=$(curl -sf -X POST "$SEC_URL/api/items" \
+  -H "Content-Type: application/json" \
+  -d '{"item_name":"Validation Test Item","status":"found","department_origin":"Security"}')
+ITEM_ID=$(echo "$ITEM_RES" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# Attempt to claim with non-existent claimant ID
+expect 400 "Claim item with non-existent claimant ID returns 400 (ERR-013)" \
+  -X PATCH "$SEC_URL/api/items/$ITEM_ID/status" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"claimed","claimed_by":"non-existent-id"}'
+
+header "E.9 Cross-Department PII Redaction"
+# 1. Create a person with full PII on Security node
+PERSON_RES=$(curl -sf -X POST "$SEC_URL/api/persons" \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Confidential Person","mobile":"09179998888","id_type":"Passport","id_number":"P1234567A"}')
+PERSON_ID=$(echo "$PERSON_RES" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# 2. Create a found item surrendered by this person
+ITEM_PII_RES=$(curl -sf -X POST "$SEC_URL/api/items" \
+  -H "Content-Type: application/json" \
+  -d "{\"item_name\":\"PII Case Item\",\"status\":\"found\",\"department_origin\":\"Security\",\"surrendered_by\":\"$PERSON_ID\"}")
+ITEM_PII_ID=$(echo "$ITEM_PII_RES" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# Wait a moment for synchronization to broadcast
+sleep 3
+
+# 3. Query item on origin node (Security) -> PII must be unredacted
+expect_contain "Origin node Security has unredacted PII" "+639179998888" "$SEC_URL/api/items/$ITEM_PII_ID"
+
+# 4. Query item on destination node (Engineering) -> PII must be redacted
+expect_contain "Destination node Engineering has redacted PII" "REDACTED" "$ENG_URL/api/items/$ITEM_PII_ID"
+
+header "E.10 Node Offline Bootstrap & Reconnection (ERR-014)"
+# Stop the Hub
+info "Stopping Hub to simulate offline environment"
+kill "$HUB_PID" 2>/dev/null || true
+lsof -ti":$HUB_PORT" -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true
+wait "$HUB_PID" 2>/dev/null || true
+
+# Verify node A (Security) disconnects
+info "Waiting for nodes to detect disconnection"
+DISCONNECTED_OK=0
+for i in $(seq 1 10); do
+  RAW_STATUS=$(curl -s "$SEC_URL/api/status" || echo "failed-to-curl")
+  echo "    Attempt $i: $RAW_STATUS"
+  SEC_STATUS=$(echo "$RAW_STATUS" | grep -o '"connected":false' || echo "")
+  if [ -n "$SEC_STATUS" ]; then
+    DISCONNECTED_OK=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$DISCONNECTED_OK" -eq 1 ]; then
+  pass "Node detected disconnection and set connected: false (ERR-014)"
+else
+  fail "Node failed to detect disconnection"
+fi
+
+# Log an item locally while offline
+info "Logging item locally while offline"
+OFFLINE_RES=$(curl -sf -X POST "$SEC_URL/api/items" \
+  -H "Content-Type: application/json" \
+  -d '{"item_name":"Offline Item","status":"found","department_origin":"Security"}')
+OFFLINE_ITEM_ID=$(echo "$OFFLINE_RES" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# Start Hub again
+info "Starting Hub again to verify automatic reconnection and sync"
+ADMIN_SECRET="$ADMIN_SECRET" PORT="$HUB_PORT" DB_PATH="$DATA_DIR/hub.db" \
+  npx tsx "$(pwd)/server/src/index.ts" &
+HUB_PID=$!
+sleep 5
+
+# Wait for node to reconnect
+RECONNECTED_OK=0
+for i in $(seq 1 15); do
+  SEC_STATUS=$(curl -sf "$SEC_URL/api/status" 2>/dev/null | grep -o '"connected":true' || echo "")
+  if [ -n "$SEC_STATUS" ]; then
+    RECONNECTED_OK=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$RECONNECTED_OK" -eq 1 ]; then
+  pass "Node successfully reconnected to Hub"
+else
+  fail "Node failed to reconnect to Hub"
+fi
+
+# Verify offline item is now synced
+info "Verifying offline item is synchronized"
+SYNC_OK=0
+for i in $(seq 1 10); do
+  SYNCED_STATUS=$(curl -sf "$SEC_URL/api/items" | grep -o "\"id\":\"$OFFLINE_ITEM_ID\",[^}]*\"synced\":[0-9]*" | cut -d: -f3 || echo "")
+  HUB_HAS_ITEM=$(curl -sf -H "x-admin-secret: $ADMIN_SECRET" "$HUB_URL/api/admin/items" | grep -c "$OFFLINE_ITEM_ID" || echo "0")
+  if [ "$SYNCED_STATUS" = "1" ] || [ "$SYNCED_STATUS" = "true" ] || [ "$HUB_HAS_ITEM" -ge 1 ]; then
+    SYNC_OK=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$SYNC_OK" -eq 1 ]; then
+  pass "Offline item automatically synchronized to Hub"
+else
+  fail "Offline item failed to sync (status: $SYNCED_STATUS, hub count: $HUB_HAS_ITEM)"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -22,7 +22,7 @@ vi.mock('./database.js', () => ({
   getAllItems: vi.fn().mockResolvedValue([]),
   getPendingSyncItems: vi.fn().mockResolvedValue([]),
   getItemById: vi.fn().mockResolvedValue(undefined),
-  getPersonById: vi.fn().mockResolvedValue(undefined),
+  getPersonById: vi.fn().mockImplementation(async (id) => id ? { id, full_name: 'Mock Person', mobile: '+639171234567' } : undefined),
   createPerson: vi.fn().mockResolvedValue(undefined),
   createItem: vi.fn().mockResolvedValue(undefined),
   updateItemStatus: vi.fn().mockResolvedValue(undefined),

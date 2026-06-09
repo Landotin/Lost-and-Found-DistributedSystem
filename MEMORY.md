@@ -6,19 +6,13 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-## 0. Active Session Status
-
-*   **Task Compile**: Phase 6 complete. Multi-stage Dockerfile created for department nodes, docker-compose.yml updated with `dept_ccs` and `dept_coe` services. Full Playwright E2E integration tests implemented and passing, verifying real-time sync, API-based sync, and offline network partition eventual consistency. All 84 global integration tests pass.
+*   **Task Compile**: Completed edge case scenario testing and resolved test suite integration issues. Isolated SQLite databases for each department node using unique DB_PATH values, updated PII prefix matching for normalized Philippine mobile numbers, and refined process-killing logic during offline tests to only terminate listening sockets. All 90 global integration tests pass successfully.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Phase 6 Docker: Created multi-stage Dockerfile for department nodes in `client/Dockerfile`.
-    *   `[x]` Phase 6 Docker: Created `client/.dockerignore` for optimized Docker builds.
-    *   `[x]` Phase 6 Docker: Added `dept_ccs` and `dept_coe` services to `docker-compose.yml`.
-    *   `[x]` Phase 6 Docker: Environment variable alignment — `DEPT_SECRET` matches hub's `ADMIN_SECRET`.
-    *   `[x]` Phase 6 E2E: Setup Playwright testing environment under `e2e/`.
-    *   `[x]` Phase 6 E2E: Implemented programmatic server orchestrator (`helpers/servers.ts`) for Hub and Node instances.
-    *   `[x]` Phase 6 E2E: Implemented Real-time Sync and API Sync verification specs.
-    *   `[x]` Phase 6 E2E: Implemented Offline Network Partition and Eventual Consistency spec.
+    *   `[x]` Edge Case: Isolated SQLite databases for Security and Engineering nodes to prevent shared database collisions.
+    *   `[x]` Edge Case: Corrected E.9 cross-department PII test to match normalized E.164 phone formats (`+639...`).
+    *   `[x]` Edge Case: Fixed E.10 stop hub logic to use `lsof -ti:<port> -sTCP:LISTEN` to avoid accidentally killing connected node client processes.
+    *   `[x]` Registry: Marked ERR-013 (claimed_by validation constraint) and ERR-014 (heartbeat interval timeout) as resolved in the Error Registry.
 *   **Pending Tasks**: None.
 
 ---
@@ -140,6 +134,17 @@ This file tracks the historical context, architectural decisions, completed mile
 ---
 
 ## 4. Session Logs
+
+### Session: 2026-06-09 (Edge Case Testing Optimization & Bug Resolution)
+*   **Scope**: Isolated node database file paths, optimized PII normalizations, and refined process cleanup during offline testing simulation.
+*   **Files modified**:
+    - `test_all_phases.sh` — Updated databases, normalized expected PII values, and restricted process killing to listening ports.
+    - `Context/ERROR.md` — Marked ERR-013 and ERR-014 as resolved.
+    - `MEMORY.md` — Updated active session status and logged this session.
+*   **Bugs Resolved**:
+    - **ERR-013**: Claimant ID verification error on `claimed` updates properly returns HTTP 400 instead of SQLite foreign key 500 error.
+    - **ERR-014**: Heartbeat timer interval collision fixed (no longer overwrites timeout references), enabling robust disconnection detection within 25 seconds.
+*   **Test Results**: 90/90 ALL TESTS PASSED.
 
 ### Session: 2026-06-09 (Phase 1-5 Comprehensive curl Verification & Automated Test Suite)
 *   **Scope**: Created `test_all_phases.sh` — automated curl integration test suite covering all 5 phases + edge cases. Created `/verify` skill for one-command test execution.
@@ -426,4 +431,25 @@ This file tracks the historical context, architectural decisions, completed mile
     - `client/tsconfig.app.json` — Added `vitest/globals` to types
     - `client/server/src/index.ts` — Fixed production static path resolution
     - `MEMORY.md` — this entry
+
+### Session: 2026-06-09 (Docker-less Local Environment Setup)
+*   **Scope**: Resolved missing Docker command issue by introducing an automated local developer startup script (`start_local.sh`).
+*   **Local Runner Script**:
+    - Created `start_local.sh` at the root directory.
+    - Cleans up ports 5000, 3001, 3002, and 5005 before starting.
+    - Verifies and installs missing dependencies.
+    - Builds client frontend assets (`npm run build`).
+    - Starts Central Hub, Security Node, Engineering Node, and the Hub Admin Dashboard concurrently.
+    - Traps `SIGINT` (Ctrl+C) and `EXIT` to clean up all background processes gracefully.
+*   **Hub Server Route Updates**:
+    - Updated `server/src/index.ts` to support both `/health` and `/api/health` to match dashboard API requests.
+*   **Registry Update**:
+    - Logged `ERR-015` in `Context/ERROR.md` outlining the `Command 'docker' not found` root cause and resolution.
+*   **Files created**:
+    - `start_local.sh` — Local runner script
+*   **Files modified**:
+    - `server/src/index.ts` — Added route mapping for `/api/health`
+    - `Context/ERROR.md` — Added `ERR-015` entry
+    - `MEMORY.md` — this entry
+
 
