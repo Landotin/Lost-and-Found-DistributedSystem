@@ -6,8 +6,8 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed. Key fixes: reordered state machine validation before `claimed_by` check (routes.ts), hardened `saveOrUpdatePerson` against empty-string PII overwrites (database.ts), added identity transitions for idempotent same-status PATCH, extracted `normalizeMobile` to database.ts and applied in sync flat-field paths. All 193 tests pass (32 client/server + 52 hub + 109 frontend).
-*   **Current Task**: Phase 4: Claims Processing — Complete.
+*   **Task Compile**: Phase 5 Hub Dashboard scaffold complete. Created hub-dashboard/ Vite React TS project with sidebar navigation (4 routes), Tailwind CSS v4, API/WS hooks, Dockerfile, and docker-compose.yml integration. Build passes with 0 errors.
+*   **Current Task**: Phase 5: Hub Dashboard Scaffold — Complete.
 *   **Completed Tasks**:
     *   `[x]` Phase 3: Global Ledger — real-time item table with filter/search on node.
     *   `[x]` Integrate SYNC_DUMP handshake (hub seeds new node with full state).
@@ -31,6 +31,9 @@ This file tracks the historical context, architectural decisions, completed mile
     *   `[x]` Code Review Fix: Added identity transitions (`same→same`) to `VALID_TRANSITIONS` — PATCH with current status is a no-op `200`, not `400`.
     *   `[x]` Code Review Fix: Extracted `normalizeMobile` to `database.ts` and applied in SYNC_DUMP/ITEM_BROADCAST/STATUS_UPDATE flat-field reconstruction — consistent E.164 across all paths.
     *   `[x]` Code Review Fix: Moved `VALID_TRANSITIONS` to module-level constant — avoids per-request allocation.
+    *   `[x]` Phase 5: Hub Dashboard scaffold — Vite project, Tailwind CSS v4, sidebar layout, 4 route placeholders.
+    *   `[x]` Phase 5: API/WS hooks — `useAdminApi` with `x-admin-secret` header, `useAdminWs` with ADMIN HELLO auth.
+    *   `[x]` Phase 5: Docker — Hub dashboard Dockerfile (multi-stage nginx), `docker-compose.yml` with `hub_dashboard` service.
 *   **Pending Tasks**: None.
 
 ---
@@ -225,3 +228,29 @@ This file tracks the historical context, architectural decisions, completed mile
     - `client/server/src/routes.ts` — validation reordered, identity transitions added, duplicate `normalizeMobile` replaced with import, `VALID_TRANSITIONS` made module-level
     - `client/server/src/index.test.ts` — test assertions updated for new error messages
 *   **Test Results**: All 193 tests pass (32 client/server + 52 hub server + 109 frontend).
+
+### Session: 2026-06-09 (Phase 5 Hub Dashboard Scaffold)
+*   **Scope**: Scaffolded the Hub Dashboard React application (`hub-dashboard/`) for the Central Hub admin interface.
+*   **Vite Initialization**: Created `hub-dashboard/` via `npx create-vite@latest hub-dashboard --template react-ts`. Installed core dependencies + `react-router-dom`, `recharts`, `lucide-react`, `date-fns`.
+*   **Tailwind CSS v4 Setup**: Installed `tailwindcss` v4 with `@tailwindcss/vite` plugin. Configured via Vite plugin (no config file needed for v4). Replaced default CSS with `@import "tailwindcss"`.
+*   **Routing & Shell Layout**: Implemented sidebar navigation layout in `App.tsx` using `react-router-dom` with `NavLink` for active styling. Four routes: `/monitor` (Monitor), `/ledger` (Global Ledger), `/logs` (Event Logs), `/analytics` (Analytics). Each route has a placeholder component with descriptive text. Root `/` redirects to `/monitor`. Wrapped app in `<BrowserRouter>` in `main.tsx`.
+*   **API & WS Hooks**:
+    - `useAdminApi.ts` — REST client using `VITE_HUB_API_URL` env var (default `http://localhost:5000/api`), sends `x-admin-secret` header on all requests. Exports `fetchHubHealth`, `fetchAllItems`, `fetchNodes`.
+    - `useAdminWs.ts` — WebSocket hook connecting to `VITE_HUB_WS_URL` (default `ws://localhost:5000`). On open, sends `{ event: "HELLO", payload: { type: "ADMIN", secret: "<secret>" } }`. Exposes `state` (`connecting` | `connected` | `disconnected`) with 3-second auto reconnect.
+*   **Docker Compose Integration**: Created `hub-dashboard/Dockerfile` (multi-stage: node build → nginx serve, port 5005). Added `hub_dashboard` service to `docker-compose.yml` exposing port 5005, with `hub` service for the backend server.
+*   **Build Verification**: TypeScript check (`tsc --noEmit`) passes. Production build (`npm run build`) succeeds, outputting 240KB JS bundle and 11KB CSS.
+*   **Files created/modified**:
+    - `hub-dashboard/package.json` — dependencies + scripts
+    - `hub-dashboard/vite.config.ts` — Tailwind v4 plugin added
+    - `hub-dashboard/src/main.tsx` — BrowserRouter wrapper
+    - `hub-dashboard/src/App.tsx` — Sidebar layout with 4 routes
+    - `hub-dashboard/src/index.css` — Tailwind import
+    - `hub-dashboard/src/pages/Monitor.tsx` — Monitor page with stat cards
+    - `hub-dashboard/src/pages/Ledger.tsx` — Global Ledger placeholder
+    - `hub-dashboard/src/pages/Logs.tsx` — Event Logs placeholder
+    - `hub-dashboard/src/pages/Analytics.tsx` — Analytics placeholder
+    - `hub-dashboard/src/hooks/useAdminApi.ts` — REST hook with admin secret
+    - `hub-dashboard/src/hooks/useAdminWs.ts` — WebSocket hook with admin auth
+    - `hub-dashboard/Dockerfile` — Multi-stage build for production
+    - `docker-compose.yml` — New compose file with hub + dashboard services
+
