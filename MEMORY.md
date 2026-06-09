@@ -473,3 +473,30 @@ This file tracks the historical context, architectural decisions, completed mile
     - `MEMORY.md` — this entry
 
 
+
+### Session: 2026-06-09 (Admin Dashboard Status-Filtered Tabs — Lost/Found/Claimed)
+*   **Scope**: Replaced the single monolithic Ledger page in the Hub Admin Dashboard with dedicated status-filtered tabs (Lost Items, Found Items, Claimed Items) mirroring the department node frontend pattern. Added status KPI bar to All Items. Fixed Monitor "Items Tracked" bug. Added `totalLost` to analytics.
+*   **Problem**: The admin dashboard's Ledger showed ALL items (lost, found, claimed) mixed in one table with no status filtering. Users could not quickly see only lost items awaiting discovery, found items awaiting claim, or claimed items as a resolved archive.
+*   **Decision**: Followed the same status-tab pattern used in the department node frontend (`client/src/`). Each page fetches from the existing `GET /api/admin/items` endpoint and filters client-side via a shared `useItemFilter` hook. The old Ledger was renamed to "All Items" with added status KPI summary badges. `/ledger` redirects to `/all-items` for backward compatibility.
+*   **Files created**:
+    - `hub-dashboard/src/hooks/useItemFilter.ts` — shared two-stage (status + search) filter hook
+    - `hub-dashboard/src/pages/LostItems.tsx` — lost items view with yellow accent, search, detail modal (6 tests)
+    - `hub-dashboard/src/pages/FoundItems.tsx` — found items view with blue accent, search, detail modal (7 tests)
+    - `hub-dashboard/src/pages/ClaimedItems.tsx` — claimed items view with green accent, surrenderer+claimant info (8 tests)
+    - `hub-dashboard/src/pages/__tests__/LostItems.test.tsx`
+    - `hub-dashboard/src/pages/__tests__/FoundItems.test.tsx`
+    - `hub-dashboard/src/pages/__tests__/ClaimedItems.test.tsx`
+*   **Files modified**:
+    - `server/src/database.ts` — Added `totalLost` to `AnalyticsResult` type and `getAnalytics()` query
+    - `server/src/database.test.ts` — Added `totalLost` count test
+    - `server/src/index.test.ts` — Updated analytics mock and assertion for `totalLost`
+    - `hub-dashboard/src/App.tsx` — 7 nav items (Monitor, All Items, Lost Items, Found Items, Claimed Items, Logs, Analytics), routes, `/ledger` to `/all-items` redirect
+    - `hub-dashboard/src/hooks/useAdminApi.ts` — Added `totalLost` to dashboard `AnalyticsResult` type
+    - `hub-dashboard/src/pages/AllItems.tsx` — Renamed from Ledger, added status KPI bar, colored status dot on item names
+    - `hub-dashboard/src/pages/Analytics.tsx` — Added Lost Items KPI card (4-column grid)
+    - `hub-dashboard/src/pages/Monitor.tsx` — Fixed "Items Tracked" bug: now shows `analytics.totalItems` instead of `nodes.length`
+    - `hub-dashboard/src/pages/__tests__/AllItems.test.tsx` — Updated from Ledger.test, added status KPI tests
+    - `hub-dashboard/src/pages/__tests__/Analytics.test.tsx` — Added `totalLost` to fixtures
+    - `hub-dashboard/src/pages/__tests__/Monitor.test.tsx` — Added `fetchAnalytics` mock to all tests
+*   **Test Results**: 55/55 dashboard tests, 81/81 server tests, 90/90 integration tests — ALL PASSED. TypeScript clean, production build succeeds.
+*   **Sidebar**: Now 7 items — Monitor, All Items, Lost Items, Found Items, Claimed Items, Logs, Analytics

@@ -146,6 +146,14 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-09
 
+### ERR-016: Admin Dashboard "Items Tracked" KPI Shows Node Count Instead of Item Count
+*   **Component**: Hub Dashboard (Monitor Page)
+*   **Symptom**: The "Items Tracked" KPI card on the Monitor page displayed the number of connected department nodes (`nodes.length`) instead of the actual number of items tracked in the database.
+*   **Root Cause**: The Monitor page's `loadData` function fetched `fetchHubHealth()` and `fetchNodes()` but never fetched analytics data. The "Items Tracked" card rendered `{nodes.length}` (line 187 of `Monitor.tsx`), but the `nodes` array length equals the connection count, not the item count.
+*   **Resolution**: Added `fetchAnalytics()` to the parallel `Promise.all` in `loadData`, stored the result in a new `analytics` state variable, and replaced `{nodes.length}` with `{analytics?.totalItems ?? '—'}`.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
 ### ERR-015: Docker Command Not Found / Docker Not Installed
 *   **Component**: Docker / Deployment
 *   **Symptom**: Running `docker compose up --build -d` fails with `Command 'docker' not found` on the host machine.
