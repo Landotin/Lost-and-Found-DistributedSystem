@@ -31,6 +31,7 @@ export function useAdminWs(options: UseAdminWsOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null)
   const [state, setState] = useState<WsState>('disconnected')
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectRef = useRef<() => void>(undefined)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -62,7 +63,7 @@ export function useAdminWs(options: UseAdminWsOptions = {}) {
         setState('disconnected')
         // Schedule reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
-          connect()
+          connectRef.current?.()
         }, 3000)
       }
     }
@@ -72,8 +73,13 @@ export function useAdminWs(options: UseAdminWsOptions = {}) {
     }
   }, [hubWsUrl, adminSecret, onEvent])
 
+  // Store connect in ref so onclose can call it without circular reference
   useEffect(() => {
-    connect()
+    connectRef.current = connect
+  }, [connect])
+
+  useEffect(() => {
+    connectRef.current?.()
 
     return () => {
       if (reconnectTimeoutRef.current) {
@@ -84,8 +90,6 @@ export function useAdminWs(options: UseAdminWsOptions = {}) {
         wsRef.current = null
       }
     }
-    // Only run connect on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { state }
