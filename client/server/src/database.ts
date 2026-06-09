@@ -34,6 +34,41 @@ export interface Item {
 }
 
 // ---------------------------------------------------------------------------
+// Mobile Number Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a Philippine mobile number to E.164 format (+639XXXXXXXXX).
+ * Handles common prefixes:
+ *   - "09171234567" (11 digits, starts with 09) → "+639171234567"
+ *   - "639171234567" (12 digits, no +)         → "+639171234567"
+ *   - "+639171234567" (already E.164)           → unchanged
+ * Falls back to the original string if it doesn't match any known pattern.
+ */
+export function normalizeMobile(mobile: string): string {
+  // Strip non-digit characters (keep + sign)
+  const cleaned = mobile.replace(/[^\d+]/g, '');
+
+  // Starts with "09" and is 11 digits → convert to +639
+  if (/^09\d{9}$/.test(cleaned)) {
+    return `+639${cleaned.slice(2)}`;
+  }
+
+  // Starts with "639" and is 12 digits (no +) → add +
+  if (/^639\d{9}$/.test(cleaned)) {
+    return `+${cleaned}`;
+  }
+
+  // Already E.164 +639...
+  if (/^\+639\d{9}$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  // Unknown format — pass through as-is
+  return mobile;
+}
+
+// ---------------------------------------------------------------------------
 // Database singleton
 // ---------------------------------------------------------------------------
 
@@ -129,19 +164,19 @@ export async function saveOrUpdatePerson(person: Person): Promise<void> {
     return;
   }
 
-  // Update existing person — guard against overwriting a valid mobile/id_type/id_number with "[REDACTED]"
+  // Update existing person — guard against overwriting a valid mobile/id_type/id_number with "[REDACTED]" or empty values
   const mobile =
-    person.mobile === '[REDACTED]' && existing.mobile !== '[REDACTED]'
+    (!person.mobile || person.mobile === '[REDACTED]') && existing.mobile
       ? existing.mobile
       : person.mobile;
 
   const id_type =
-    person.id_type === '[REDACTED]' && existing.id_type !== '[REDACTED]'
+    (!person.id_type || person.id_type === '[REDACTED]') && existing.id_type
       ? existing.id_type
       : person.id_type;
 
   const id_number =
-    person.id_number === '[REDACTED]' && existing.id_number !== '[REDACTED]'
+    (!person.id_number || person.id_number === '[REDACTED]') && existing.id_number
       ? existing.id_number
       : person.id_number;
 
@@ -248,7 +283,7 @@ export async function handleIncomingItem(payload: {
     surrendererPerson = {
       id: payload.surrendered_by,
       full_name: (payload as any).surrenderer_full_name,
-      mobile: (payload as any).surrenderer_mobile ?? '',
+      mobile: (payload as any).surrenderer_mobile ? normalizeMobile((payload as any).surrenderer_mobile) : undefined,
       id_type: (payload as any).surrenderer_id_type ?? undefined,
       id_number: (payload as any).surrenderer_id_number ?? undefined,
     };
@@ -266,7 +301,7 @@ export async function handleIncomingItem(payload: {
     claimantPerson = {
       id: payload.claimed_by,
       full_name: (payload as any).claimant_full_name,
-      mobile: (payload as any).claimant_mobile ?? '',
+      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : undefined,
       id_type: (payload as any).claimant_id_type ?? undefined,
       id_number: (payload as any).claimant_id_number ?? undefined,
     };
@@ -377,7 +412,7 @@ export async function handleIncomingStatusUpdate(payload: {
     claimantPerson = {
       id: payload.claimed_by,
       full_name: (payload as any).claimant_full_name,
-      mobile: (payload as any).claimant_mobile ?? '',
+      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : undefined,
       id_type: (payload as any).claimant_id_type ?? undefined,
       id_number: (payload as any).claimant_id_number ?? undefined,
     };

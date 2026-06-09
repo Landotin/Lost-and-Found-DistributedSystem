@@ -135,6 +135,150 @@ describe('Client Server — Entry Point', () => {
   });
 
   // -----------------------------------------------------------------------
+  // State Machine — Status Transitions
+  // -----------------------------------------------------------------------
+
+  it('PATCH /items/:id/status — lost -> found succeeds (200)', async () => {
+    const { getItemById, updateItemStatus } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-lost',
+      item_name: 'Wallet',
+      description: null,
+      category: null,
+      department_origin: 'TestDept',
+      status: 'lost' as const,
+      surrendered_by: null,
+      claimed_by: null,
+      claimed_at: null,
+      synced: 1,
+      updated_at: '2026-06-09T00:00:00.000Z',
+      created_at: '2026-06-09T00:00:00.000Z',
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ...mockItem, status: 'found' });
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-lost/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'found' }),
+    });
+    expect(res.status).toBe(200);
+    expect(updateItemStatus).toHaveBeenCalledWith('test-item-lost', 'found', undefined);
+  });
+
+  it('PATCH /items/:id/status — found -> claimed succeeds (200)', async () => {
+    const { getItemById, updateItemStatus } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-found',
+      item_name: 'Phone',
+      description: null,
+      category: null,
+      department_origin: 'TestDept',
+      status: 'found' as const,
+      surrendered_by: null,
+      claimed_by: null,
+      claimed_at: null,
+      synced: 1,
+      updated_at: '2026-06-09T00:00:00.000Z',
+      created_at: '2026-06-09T00:00:00.000Z',
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ...mockItem, status: 'claimed' });
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-found/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'claimed', claimed_by: 'claimant-id' }),
+    });
+    expect(res.status).toBe(200);
+    expect(updateItemStatus).toHaveBeenCalledWith('test-item-found', 'claimed', 'claimant-id');
+  });
+
+  it('PATCH /items/:id/status — lost -> claimed fails with 400', async () => {
+    const { getItemById } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-skip',
+      item_name: 'Skip',
+      status: 'lost' as const,
+      department_origin: 'TestDept',
+      synced: 1,
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-skip/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'claimed', claimed_by: 'claimant-id' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Cannot transition');
+  });
+
+  it('PATCH /items/:id/status — claimed -> found fails with 400', async () => {
+    const { getItemById } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-claimed',
+      item_name: 'Tablet',
+      status: 'claimed' as const,
+      department_origin: 'TestDept',
+      synced: 1,
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-claimed/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'found' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Cannot transition');
+  });
+
+  it('PATCH /items/:id/status — claimed -> lost fails with 400', async () => {
+    const { getItemById } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-claimed-2',
+      item_name: 'Camera',
+      status: 'claimed' as const,
+      department_origin: 'TestDept',
+      synced: 1,
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-claimed-2/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'lost' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Cannot transition');
+  });
+
+  it('PATCH /items/:id/status — found -> lost fails with 400', async () => {
+    const { getItemById } = await import('./database.js');
+    const mockItem = {
+      id: 'test-item-revert',
+      item_name: 'Bag',
+      status: 'found' as const,
+      department_origin: 'TestDept',
+      synced: 1,
+    };
+    (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockItem);
+
+    const res = await fetch(`http://localhost:${port}/api/items/test-item-revert/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'lost' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Cannot transition');
+  });
+
+  // -----------------------------------------------------------------------
   // Lifecycle guards
   // -----------------------------------------------------------------------
 

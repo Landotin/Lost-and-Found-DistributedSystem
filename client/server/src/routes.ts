@@ -9,6 +9,7 @@ import {
   getPendingSyncItems,
   updateItemStatus,
   markItemSynced,
+  normalizeMobile,
   Person,
   Item,
   ItemStatus,
@@ -18,6 +19,17 @@ import { WsClientManager, ConnectionStatus } from './ws-client.js';
 // ---------------------------------------------------------------------------
 // Router factory — accepts the WsClientManager ref and dept name
 // ---------------------------------------------------------------------------
+/**
+ * Allowed state transitions for items.
+ * Each entry lists the statuses the current status can transition to.
+ * Identity transitions (same → same) are included for idempotency:
+ * PATCHing the current status is a no-op, not an error.
+ */
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  'lost': ['lost', 'found'],
+  'found': ['found', 'claimed'],
+  'claimed': ['claimed'],   // terminal state — only identity no-op allowed
+};
 
 export function createApiRouter(
   wsManager: WsClientManager,
@@ -52,7 +64,7 @@ export function createApiRouter(
       const person: Person = {
         id: uuidv4(),
         full_name,
-        mobile,
+        mobile: normalizeMobile(mobile),
         id_type: id_type || undefined,
         id_number: id_number || undefined,
       };
@@ -180,14 +192,27 @@ export function createApiRouter(
         return;
       }
 
-      if (status === 'claimed' && !claimed_by) {
-        res.status(400).json({ error: 'claimed_by is required when status is "claimed"' });
-        return;
-      }
-
       const item = await getItemById(req.params.id);
       if (!item) {
         res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+
+      // --- Strict state machine validation ---
+      const currentStatus = item.status;
+      const allowedNext = VALID_TRANSITIONS[currentStatus] ?? [];
+
+      if (!allowedNext.includes(status)) {
+        const message =
+          allowedNext.length === 0
+            ? `Item is already in terminal state "${currentStatus}" — no further transitions are allowed.`
+            : `Cannot transition item from "${currentStatus}" to "${status}". Allowed transition: "${currentStatus}" -> "${allowedNext.join(', ')}".`;
+        res.status(400).json({ error: message });
+        return;
+      }
+
+      if (status === 'claimed' && !claimed_by) {
+        res.status(400).json({ error: 'claimed_by is required when status is "claimed"' });
         return;
       }
 
