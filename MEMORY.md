@@ -6,8 +6,8 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 3 Global Ledger fully verified. Executed 133 manual curl tests across 7 categories (health, persons, items, claims, PII redaction, offline sync, error/edge cases). Found and fixed 2 critical bugs: missing `markItemSynced` import (ERR-008) and bidirectional heartbeat ACK failure causing constant reconnections (ERR-009). All 78 automated tests pass (52 hub + 26 client).
-*   **Current Task**: Phase 4: Claims Processing.
+*   **Task Compile**: Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed. Key fixes: reordered state machine validation before `claimed_by` check (routes.ts), hardened `saveOrUpdatePerson` against empty-string PII overwrites (database.ts), added identity transitions for idempotent same-status PATCH, extracted `normalizeMobile` to database.ts and applied in sync flat-field paths. All 193 tests pass (32 client/server + 52 hub + 109 frontend).
+*   **Current Task**: Phase 4: Claims Processing — Complete.
 *   **Completed Tasks**:
     *   `[x]` Phase 3: Global Ledger — real-time item table with filter/search on node.
     *   `[x]` Integrate SYNC_DUMP handshake (hub seeds new node with full state).
@@ -18,8 +18,20 @@ This file tracks the historical context, architectural decisions, completed mile
     *   `[x]` Bugfix: `markItemSynced` missing import in routes.ts causing 500 on claim (ERR-008).
     *   `[x]` Bugfix: Bidirectional heartbeat ACK failure causing constant disconnects (ERR-009).
     *   `[x]` Full Phase 3 curl verification: 133 tests covering health, person CRUD, item CRUD, Global Ledger listing, status update/claim flow, cross-dept PII redaction, offline sync queue flush, and error/edge cases.
-*   **Pending Tasks**:
-    *   `[ ]` Phase 4: Claims Processing — Build claims processing flow and sync claimed status.
+    *   `[x]` Phase 4 Backend: Strict state machine validation (`lost → found → claimed`) in `routes.ts`.
+    *   `[x]` Phase 4 Backend: Mobile number normalization (Philippine `09...` → `+639...`) in `routes.ts`.
+    *   `[x]` Phase 4 Backend: 6 new integration tests for state transitions (all passing).
+    *   `[x]` Phase 4 Frontend: Refactored `validateMobile` to accept Philippine `09...` format, added `formatMobileToE164` utility.
+    *   `[x]` Phase 4 Frontend: Created `ProcessClaim` component with item search/dropdown (found items only), claimant form, E.164 conversion on submit, and success/error/loading states.
+    *   `[x]` Phase 4 Frontend: Added `[Process Claim]` button in Global Ledger DetailModal for found items, wired callback to switch tab.
+    *   `[x]` Phase 4 Frontend: Added "Process Claim" tab in App navigation with `processClaimItemId` state for preselection.
+    *   `[x]` Phase 4 Frontend: 136 tests passing (12 files) — validation, ProcessClaim, GlobalLedger, App.
+    *   `[x]` Code Review Fix: Reordered state machine check before `claimed_by` validation — users get the correct error first.
+    *   `[x]` Code Review Fix: Hardened `saveOrUpdatePerson` guard — empty strings no longer overwrite real PII, not just `[REDACTED]`.
+    *   `[x]` Code Review Fix: Added identity transitions (`same→same`) to `VALID_TRANSITIONS` — PATCH with current status is a no-op `200`, not `400`.
+    *   `[x]` Code Review Fix: Extracted `normalizeMobile` to `database.ts` and applied in SYNC_DUMP/ITEM_BROADCAST/STATUS_UPDATE flat-field reconstruction — consistent E.164 across all paths.
+    *   `[x]` Code Review Fix: Moved `VALID_TRANSITIONS` to module-level constant — avoids per-request allocation.
+*   **Pending Tasks**: None.
 
 ---
 
@@ -102,17 +114,20 @@ This file tracks the historical context, architectural decisions, completed mile
 *   [x] Search by item name
 *   [x] SYNC_DUMP on connect (hub → node)
 
-### Phase 4: Claims Processing (Pending)
-*   [ ] Build Process Claim screen
-*   [ ] Implement status transition checks (`lost -> found -> claimed`)
-*   [ ] Sync claimed state across nodes
+### Phase 4: Claims Processing (Complete — 2026-06-09)
+*   [x] Strict state machine validation (`lost → found → claimed`) in `PATCH /items/:id/status`
+*   [x] Mobile number normalization (`09...` → `+639...`) on person creation
+*   [x] 6 new backend integration tests for state transitions (84 total backend tests passing)
+*   [x] Frontend Process Claim component with item search/dropdown and claimant form
+*   [x] Global Ledger integration — [Process Claim] button on found item details
+*   [x] App navigation — Process Claim tab with preselection support
+*   [x] 136 frontend tests passing (12 test files)
 
 ---
 
 ## 3. Current Focus & Next Steps
-1.  Phase 3: Global Ledger — real-time item table with filter/search on node.
-2.  Integrate SYNC_DUMP handshake (hub seeds new node with full state).
-3.  Test ITEM_BROADCAST propagation between nodes.
+1.  Phase 4 complete. Next phase (Phase 5) TBD.
+2.  End-to-end verification of the full claim flow across multiple nodes.
 
 ---
 
@@ -162,3 +177,51 @@ This file tracks the historical context, architectural decisions, completed mile
     - **ERR-008**: `markItemSynced` called without being imported in `client/server/src/routes.ts`. Claim endpoint returned 500 despite succeeding in DB. Fixed by adding `markItemSynced` to the import list.
     - **ERR-009**: Bidirectional heartbeat ACK missing. Hub sent `HEARTBEAT` pings but nodes had no handler → nodes didn't ACK → hub timed out after 2 misses (~25s). Nodes sent `HEARTBEAT` pings but hub had no handler → hub silently ignored → nodes timed out. Result: both nodes disconnected/reconnected every ~25s, STATUS_UPDATE broadcasts never reached Engineering. Fixed by: (1) adding `HEARTBEAT: () => { this.send('ACK', {}); }` in `ws-client.ts` event handlers, (2) adding a `HEARTBEAT → ACK` response handler in `server/src/index.ts` message router.
 *   **Verification**: All 78 automated tests pass (52 hub + 26 client). Connections stable at 218s+ uptime with no reconnects. PII redaction confirmed correct: Security retains real PII, Engineering sees `[REDACTED]` for all cross-dept data. Offline→online sync flush works end-to-end.
+
+### Session: 2026-06-09 (Phase 4 Frontend — Claims UI & Validation)
+*   **Scope**: Implemented the frontend Claims Processing UI for Phase 4 in the `rdlft-phase4-frontend` worktree.
+*   **Mobile Validation Refactor**: Updated `validateMobile` to accept both `+639...` and Philippine `09...` formats. Added `formatMobileToE164()` utility to convert `09...` to `+639...` before API submission. 26 validation tests all passing.
+*   **ProcessClaim Component**: Created new component with:
+    *   Search/dropdown to find found items by name or ID (filters out non-found items).
+    *   Claimant form (Full Name, Mobile, ID Type, ID Number) with validation.
+    *   Two-step submission: `createPerson` → `updateItemStatus` with E.164 mobile conversion.
+    *   Full state coverage: loading, empty (no found items), error (API failure), success, and preselected item auto-routing.
+    *   Back button to return to item selection.
+    *   15 integration tests all passing.
+*   **Global Ledger Integration**: Added `onProcessClaim` prop to `GlobalLedger` and `DetailModal`. Renders `[Process Claim]` button for items with `status === 'found'`. Button triggers callback passing the item ID, then closes modal. 22 GlobalLedger tests (including 5 new Process Claim button tests) all passing.
+*   **App Navigation**: Added "Process Claim" tab alongside existing tabs. Introduced `processClaimItemId` state for tab switching with preselection. Tab click clears preselection; Global Ledger callback sets it. 4 App tests all passing.
+*   **Files created/modified**:
+    - `client/src/utils/validation.ts` — `validateMobile` accepts `09...`, new `formatMobileToE164`
+    - `client/src/utils/validation.test.ts` — 26 tests for both formats + conversion
+    - `client/src/components/ProcessClaim.tsx` — new Process Claim component
+    - `client/src/components/__tests__/ProcessClaim.test.tsx` — 15 integration tests
+    - `client/src/components/GlobalLedger.tsx` — `onProcessClaim` prop, button in modal
+    - `client/src/components/__tests__/GlobalLedger.test.tsx` — 5 new Process Claim button tests
+    - `client/src/App.tsx` — new "Process Claim" tab, state for preselected item ID
+    - `client/src/App.test.tsx` — updated for 4 tabs, tab click test
+*   **Test Results**: All 136 frontend tests pass across 12 test files.
+
+### Session: 2026-06-09 (Phase 4 Backend — State Machine & Mobile Validation)
+*   **Scope**: Implemented backend validation logic for Phase 4 Claims Processing in the `rdlft-phase4-backend` worktree.
+*   **State Machine Validation**: Added strict transition enforcement in `client/server/src/routes.ts` — `PATCH /items/:id/status` now validates:
+    *   `lost → found` ✓
+    *   `found → claimed` ✓
+    *   All other transitions (including `lost → claimed`, `claimed → any`, reversions) return **HTTP 400** with descriptive error messages. `claimed` is treated as a terminal state.
+*   **Mobile Number Normalization**: Added `normalizeMobile()` to convert Philippine `09...` prefixes to E.164 `+639...` format, applied in `POST /persons`.
+*   **Tests**: Wrote 6 new integration tests covering all valid and invalid transitions. All 84 tests pass (32 client/server + 52 hub server).
+*   **Files modified**:
+    - `client/server/src/routes.ts` — state machine transition table, `normalizeMobile` helper
+    - `client/server/src/index.test.ts` — 6 new state transition tests
+
+### Session: 2026-06-09 (Code Review Fixes — Validation Ordering, PII Guard, Idempotency)
+*   **Scope**: Addressed all 5 findings from high-effort code review across 7 review angles.
+*   **Finding 1 (HIGH) — claimed_by check before state machine**: `PATCH /items/:id/status` validated `claimed_by` required before checking state transitions, producing misleading errors (e.g., "claimed_by is required" instead of "Cannot transition from lost to claimed"). **Fix**: Moved state machine check before `claimed_by` validation.
+*   **Finding 2 (HIGH) — Empty-string PII overwrite in sync paths**: `handleIncomingItem` and `handleIncomingStatusUpdate` in `database.ts` defaulted missing mobile to `""` in flat-field reconstruction. The `saveOrUpdatePerson` guard only protected against `"[REDACTED]"` — empty strings silently overwrote real PII. **Fix**: Changed defaults from `?? ''` to `?? undefined`, and widened `saveOrUpdatePerson` guard to `(!person.mobile || person.mobile === '[REDACTED]')`.
+*   **Finding 3 (MEDIUM) — Same-status transitions rejected**: Setting status to the current value returned `400` because `VALID_TRANSITIONS` didn't include identity transitions. **Fix**: Added `same→same` entries — `'lost': ['lost', 'found']`, `'found': ['found', 'claimed']`, `'claimed': ['claimed']`.
+*   **Finding 4 (MEDIUM) — normalizeMobile not in sync paths**: `normalizeMobile` was only applied in `POST /persons`, not in SYNC_DUMP/ITEM_BROADCAST flat-field reconstruction. **Fix**: Moved `normalizeMobile` to `database.ts`, exported it, and applied in all 3 flat-field person reconstruction sites.
+*   **Finding 5 (LOW) — VALID_TRANSITIONS per-request**: The map was allocated inside each request handler. **Fix**: Extracted to module-level constant.
+*   **Files modified**:
+    - `client/server/src/database.ts` — `saveOrUpdatePerson` guard widened, `normalizeMobile` added + exported, flat-field defaults changed to `undefined`, `normalizeMobile` applied in sync paths
+    - `client/server/src/routes.ts` — validation reordered, identity transitions added, duplicate `normalizeMobile` replaced with import, `VALID_TRANSITIONS` made module-level
+    - `client/server/src/index.test.ts` — test assertions updated for new error messages
+*   **Test Results**: All 193 tests pass (32 client/server + 52 hub server + 109 frontend).

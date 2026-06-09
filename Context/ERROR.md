@@ -91,6 +91,24 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-09
 
+### ERR-010: Empty-String PII Overwrite in Sync Flat-Field Reconstruction
+*   **Component**: Database / Client Server
+*   **Symptom**: During SYNC_DUMP or ITEM_BROADCAST processing, mobile numbers and ID fields of existing persons could be silently overwritten with empty strings, losing PII data.
+*   **Root Cause**: `handleIncomingItem` and `handleIncomingStatusUpdate` in `client/server/src/database.ts` reconstructed person objects from flat fields using `?? ''` as default for missing mobile values. The `saveOrUpdatePerson` guard only checked for the literal string `[REDACTED]` — empty strings passed through and overwrote existing valid mobile numbers.
+*   **Resolution**: 
+    1. Changed flat-field defaults from `?? ''` to `?? undefined` so missing mobile values don't become empty strings.
+    2. Widened `saveOrUpdatePerson` guards to `(!person.mobile || person.mobile === '[REDACTED]')` — empty, null, and undefined incoming values now preserve the existing record.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
+### ERR-011: Misleading Error Message Due to Validation Ordering
+*   **Component**: Client Server (Routes)
+*   **Symptom**: `PATCH /items/:id/status` with `{ status: "claimed" }` on a `lost` item (without `claimed_by`) returned "claimed_by is required" instead of informing the user the transition `lost → claimed` is invalid.
+*   **Root Cause**: The `claimed_by` required check ran before the state machine validation (`if (status === 'claimed' && !claimed_by)` at line 214, before state machine check at line 235). Users got a misleading "missing field" error when the fundamental error was an invalid state transition.
+*   **Resolution**: Reordered validation in `routes.ts: PATCH /items/:id/status`: (1) status valid format, (2) item exists (404), (3) state machine transition (400), (4) `claimed_by` required check (400). Correct primary error is now reported first.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
 ### ERR-009: Bidirectional Heartbeat ACK Failure — Constant Reconnections
 *   **Component**: Server + Client Server (WebSocket)
 *   **Symptom**: Both Security and Engineering department nodes connect successfully, complete the HELLO handshake, receive SYNC_DUMP, and function normally for ~25 seconds — then disconnect and reconnect in a loop (`Heartbeat ACK timeout — reconnecting`). Log shows repeated `[WS-Client] Unhandled event: HEARTBEAT` on the node side, and the hub's HeartbeatManager fires `node_timeout` events for both nodes.
