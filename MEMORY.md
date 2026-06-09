@@ -6,22 +6,18 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 5 Hub Backend complete — Admin REST APIs, Admin WebSocket support, and comprehensive tests.
-*   **Current Task**: Phase 5: Hub Admin Backend — Complete.
+*   **Task Compile**: Phase 5 Backend and Frontend Scaffold complete. Implemented Admin REST APIs, Admin WebSocket support, and comprehensive tests in the hub. Created hub-dashboard/ Vite React TS project with sidebar navigation, Tailwind CSS v4, API/WS hooks, and Docker integration.
+*   **Current Task**: Phase 5: Hub Dashboard Views — Pending.
 *   **Completed Tasks**:
     *   `[x]` Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed.
-    *   `[x]` Phase 5: Added `adminAuth` Express middleware checking `x-admin-secret` header against `ADMIN_SECRET`.
-    *   `[x]` Phase 5: Implemented `GET /api/admin/nodes` returning connected node list (socketId, deptName, connectedAt).
-    *   `[x]` Phase 5: Implemented `POST /api/admin/nodes/:id/disconnect` to force-disconnect a node.
-    *   `[x]` Phase 5: Implemented `POST /api/admin/nodes/:id/sync` to trigger SYNC_DUMP to a specific node.
-    *   `[x]` Phase 5: Implemented `GET /api/admin/items` returning all items with full joined person PII (unredacted).
-    *   `[x]` Phase 5: Implemented `GET /api/admin/analytics` returning items-by-department, claim rate, total items.
-    *   `[x]` Phase 5: Added admin WebSocket support — `HELLO` with `{ type: 'ADMIN', secret }` registers into separate `adminNodes` map, skips node registration.
-    *   `[x]` Phase 5: `broadcastToOthers` sends exact unredacted copy of every event to all connected admin sockets.
-    *   `[x]` Phase 5: Added `getNode()`, `disconnectNode()`, `addAdminNode()`, `removeAdminNode()`, `getAdminNodeCount()` to ConnectionManager.
-    *   `[x]` Phase 5: Added `getAllItemsWithPII()` and `getAnalytics()` to database module.
-    *   `[x]` Phase 5: 80 passing tests (up from 52) — 5 test files all green.
-    *   `[x]` Phase 5: All existing integration tests (PII redaction, SYNC_DUMP, ITEM_BROADCAST) continue to pass.
+    *   `[x]` Phase 5 Backend: Added `adminAuth` Express middleware checking `x-admin-secret` header.
+    *   `[x]` Phase 5 Backend: Implemented `GET /api/admin/nodes`, `POST /api/admin/nodes/:id/disconnect`, `POST /api/admin/nodes/:id/sync`.
+    *   `[x]` Phase 5 Backend: Implemented `GET /api/admin/items` and `GET /api/admin/analytics`.
+    *   `[x]` Phase 5 Backend: Added admin WebSocket support (unredacted `broadcastToOthers`).
+    *   `[x]` Phase 5 Backend: 80 passing tests across 5 files.
+    *   `[x]` Phase 5 Frontend: Hub Dashboard scaffold — Vite project, Tailwind CSS v4, sidebar layout.
+    *   `[x]` Phase 5 Frontend: API/WS hooks — `useAdminApi`, `useAdminWs`.
+    *   `[x]` Phase 5 Frontend: Hub dashboard Dockerfile and `docker-compose.yml`.
 *   **Pending Tasks**: None.
 
 ---
@@ -233,3 +229,29 @@ This file tracks the historical context, architectural decisions, completed mile
     - `client/server/src/routes.ts` — validation reordered, identity transitions added, duplicate `normalizeMobile` replaced with import, `VALID_TRANSITIONS` made module-level
     - `client/server/src/index.test.ts` — test assertions updated for new error messages
 *   **Test Results**: All 193 tests pass (32 client/server + 52 hub server + 109 frontend).
+
+### Session: 2026-06-09 (Phase 5 Hub Dashboard Scaffold)
+*   **Scope**: Scaffolded the Hub Dashboard React application (`hub-dashboard/`) for the Central Hub admin interface.
+*   **Vite Initialization**: Created `hub-dashboard/` via `npx create-vite@latest hub-dashboard --template react-ts`. Installed core dependencies + `react-router-dom`, `recharts`, `lucide-react`, `date-fns`.
+*   **Tailwind CSS v4 Setup**: Installed `tailwindcss` v4 with `@tailwindcss/vite` plugin. Configured via Vite plugin (no config file needed for v4). Replaced default CSS with `@import "tailwindcss"`.
+*   **Routing & Shell Layout**: Implemented sidebar navigation layout in `App.tsx` using `react-router-dom` with `NavLink` for active styling. Four routes: `/monitor` (Monitor), `/ledger` (Global Ledger), `/logs` (Event Logs), `/analytics` (Analytics). Each route has a placeholder component with descriptive text. Root `/` redirects to `/monitor`. Wrapped app in `<BrowserRouter>` in `main.tsx`.
+*   **API & WS Hooks**:
+    - `useAdminApi.ts` — REST client using `VITE_HUB_API_URL` env var (default `http://localhost:5000/api`), sends `x-admin-secret` header on all requests. Exports `fetchHubHealth`, `fetchAllItems`, `fetchNodes`.
+    - `useAdminWs.ts` — WebSocket hook connecting to `VITE_HUB_WS_URL` (default `ws://localhost:5000`). On open, sends `{ event: "HELLO", payload: { type: "ADMIN", secret: "<secret>" } }`. Exposes `state` (`connecting` | `connected` | `disconnected`) with 3-second auto reconnect.
+*   **Docker Compose Integration**: Created `hub-dashboard/Dockerfile` (multi-stage: node build → nginx serve, port 5005). Added `hub_dashboard` service to `docker-compose.yml` exposing port 5005, with `hub` service for the backend server.
+*   **Build Verification**: TypeScript check (`tsc --noEmit`) passes. Production build (`npm run build`) succeeds, outputting 240KB JS bundle and 11KB CSS.
+*   **Files created/modified**:
+    - `hub-dashboard/package.json` — dependencies + scripts
+    - `hub-dashboard/vite.config.ts` — Tailwind v4 plugin added
+    - `hub-dashboard/src/main.tsx` — BrowserRouter wrapper
+    - `hub-dashboard/src/App.tsx` — Sidebar layout with 4 routes
+    - `hub-dashboard/src/index.css` — Tailwind import
+    - `hub-dashboard/src/pages/Monitor.tsx` — Monitor page with stat cards
+    - `hub-dashboard/src/pages/Ledger.tsx` — Global Ledger placeholder
+    - `hub-dashboard/src/pages/Logs.tsx` — Event Logs placeholder
+    - `hub-dashboard/src/pages/Analytics.tsx` — Analytics placeholder
+    - `hub-dashboard/src/hooks/useAdminApi.ts` — REST hook with admin secret
+    - `hub-dashboard/src/hooks/useAdminWs.ts` — WebSocket hook with admin auth
+    - `hub-dashboard/Dockerfile` — Multi-stage build for production
+    - `docker-compose.yml` — New compose file with hub + dashboard services
+
