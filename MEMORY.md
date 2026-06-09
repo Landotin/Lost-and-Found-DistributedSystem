@@ -6,19 +6,34 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Implemented "Mark as Found" feature — lost items can now be transitioned to 'found' with surrenderer (finder) information attached to the same record, eliminating duplicate lost/found entries. Extended `updateItemStatus()` with `surrendered_by` parameter. Extended `PATCH /items/:id/status` and `STATUS_UPDATE` WebSocket broadcast to carry surrenderer person data on both client-server and hub-server. Added Mark as Found button + surrenderer form to LostItems DetailModal. All Phase 1 tests passing.
+*   **Task Compile**: Phase 2 Smart Matching completed — when logging a found/lost item, the system debounce-searches for existing opposite-direction records and shows a non-blocking suggestion banner with cross-tab routing. 202 client tests + 81 server tests + 96 integration tests all passing.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Extended `updateItemStatus()` in client server database.ts with optional `surrendered_by` param
-    *   `[x]` Extended `PATCH /items/:id/status` to accept `surrendered_by` for 'found' transitions
-    *   `[x]` Extended `STATUS_UPDATE` WebSocket broadcast with surrenderer person data on client server
-    *   `[x]]` Extended hub server STATUS_UPDATE handler to accept and save surrenderer person data
-    *   `[x]` Extended node `handleIncomingStatusUpdate` for surrenderer person LWW sync
-    *   `[x]` Added "Mark as Found" button + surrenderer form in LostItems DetailModal (with submission, success, error, retry states)
-    *   `[x]` All 306 tests passing (34 client-server + 191 frontend + 81 hub-server)
+    *   `[x]` Phase 2 Smart Matching backend: `findMatchingItems()` DB function + `GET /api/items/matches` endpoint
+    *   `[x]` Phase 2 Smart Matching frontend: debounced match search + suggestion banners in LogItemForm
+    *   `[x]` Phase 2 Cross-tab routing: "Mark as Found" → LostItems tab, "Claim Instead" → ProcessClaim tab
+    *   `[x]` 6 backend + 5 frontend + 6 integration smart matching tests
+    *   `[x]` All 202 frontend + 81 server + 96 integration tests passing
 *   **Pending Tasks**:
-    *   `[ ]` **Phase 2**: Smart matching suggestions on LogItemForm — when logging a found item, suggest matching lost items; when logging a lost item, suggest matching found items (prevents duplicates before creation)
-    *   `[ ]` **Phase 2**: Cross-tab routing for smart matching suggestions
+    *   `[ ]` Offline sync reliability — items created during offline should maintain `synced=0` through status updates
+    *   `[ ]` Hub Dashboard — avg time-to-claim analytics, offline event count
+
+### Session: 2026-06-09 (Phase 2 — Smart Matching Implementation)
+*   **Scope**: Implemented smart matching suggestions on LogItemForm to detect existing opposite-direction records before creating duplicate entries. When a user types an item name, the system debounce-searches for matching items and shows a non-blocking suggestion banner.
+*   **Backend (`client/server/src/`)**:
+    - `database.ts` — Added `findMatchingItems(q, oppositeStatus)` with SQL LIKE + JOINs for person data
+    - `routes.ts` — Added `GET /api/items/matches?q=STRING&status=STATUS` route (registered before `/items/:id` to avoid Express param capture)
+    - `index.test.ts` — Added `findMatchingItems` mock + 6 new tests (match found→lost, match lost→found, short query, invalid status, missing params)
+*   **Frontend (`client/src/`)**:
+    - `hooks/useApi.ts` — Added `fetchMatchingItems()` and `MatchResponse` interface
+    - `LogItemForm.tsx` — Added debounced (300ms) match search via `useEffect` watching `itemName` + `status`. Suggestion banner with role="alert": yellow for "was reported lost" (→LostItems tab), blue for "was already found" (→Claim tab). Dismiss button per banner.
+    - `App.tsx` — Passed `onNavigate` prop to `LogItemForm` for cross-tab routing
+    - `LogItemForm.test.tsx` — 5 new tests (show lost suggestion, show found suggestion, dismiss, Mark as Found routing, Claim Instead routing)
+*   **Integration Tests** (`test_all_phases.sh`):
+    - Added Phase 2 (Smart Matching) section with 6 tests: match found→lost, cross-node match lost→found, short query, invalid status, no-match case
+    - Renamed test header from "Phase 1-5" to include Smart Matching
+*   **Test Results**: 202/202 client tests + 81/81 server tests + 96/96 integration tests — ALL PASSED.
+*   **Files modified**: `client/server/src/database.ts`, `routes.ts`, `index.test.ts`, `client/src/hooks/useApi.ts`, `client/src/components/LogItemForm.tsx`, `client/src/App.tsx`, `client/src/components/__tests__/LogItemForm.test.tsx`, `test_all_phases.sh`, `MEMORY.md`
 
 ---
 
@@ -130,11 +145,9 @@ This file tracks the historical context, architectural decisions, completed mile
 ---
 
 ## 3. Current Focus & Next Steps
-## 3. Current Focus & Next Steps
 1.  Phase 6 complete — department nodes containerized, docker-compose unified. Playwright-based E2E tests prove real-time sync and offline/eventual consistency in the distributed Hub-and-Spoke architecture.
-2.  Created `test_all_phases.sh` — automated curl integration test suite (84 tests, Phases 1-5 + edge cases). All 84 passing.
-3.  Created `/verify` slash command skill in `.claude/skills/verify.md` to run the test suite on demand.
-4.  Next steps: Run `docker compose up --build -d` on a Docker-capable machine to verify deployment, and clean up temporary worktrees.
+2.  Phase 2 Smart Matching complete — automated debounced matching prevents duplicate entries when logging items with existing opposite-direction records.
+3.  Next steps: Offline sync reliability fix, Hub Dashboard avg-time-to-claim analytics, Docker deployment verification.
 
 ---
 

@@ -106,7 +106,7 @@ Lost items can now be **marked as found** with surrenderer (finder) information 
 }
 ```
 
-### Pending: Phase 2 — Smart Matching (LogItemForm)
+### Phase 2 — Smart Matching (LogItemForm) ✓ Complete
 
 When logging an item, the system should check for existing opposite-direction records and suggest the correct action:
 
