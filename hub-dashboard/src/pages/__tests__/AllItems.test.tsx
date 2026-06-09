@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Ledger from '../Ledger'
+import AllItems from '../AllItems'
 
 const mockFetchAllItems = vi.fn()
 vi.mock('../../hooks/useAdminApi', () => ({
@@ -33,25 +33,40 @@ function createItem(overrides: Record<string, unknown> = {}) {
   }
 }
 
-describe('Ledger Page', () => {
+describe('All Items Page', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders page title', () => {
     mockFetchAllItems.mockReturnValue(new Promise(() => {}))
-    render(<Ledger />)
-    expect(screen.getByText('Global Ledger')).toBeInTheDocument()
+    render(<AllItems />)
+    expect(screen.getByText('All Items')).toBeInTheDocument()
   })
 
   it('renders error state', async () => {
     mockFetchAllItems.mockRejectedValue(new Error('API failure'))
-    render(<Ledger />)
+    render(<AllItems />)
     await waitFor(() => { expect(screen.getByText(/api failure/i)).toBeInTheDocument() })
   })
 
   it('renders empty state when no items', async () => {
     mockFetchAllItems.mockResolvedValue([])
-    render(<Ledger />)
+    render(<AllItems />)
     await waitFor(() => { expect(screen.getByText(/no items tracked/i)).toBeInTheDocument() })
+  })
+
+  it('renders status KPI badges with correct counts', async () => {
+    const items = [
+      createItem({ id: 1, item_name: 'Lost Phone', status: 'lost' }),
+      createItem({ id: 2, item_name: 'Found Wallet', status: 'found' }),
+      createItem({ id: 3, item_name: 'Claimed Bag', status: 'claimed' }),
+    ]
+    mockFetchAllItems.mockResolvedValue(items)
+    render(<AllItems />)
+    await waitFor(() => {
+      expect(screen.getByText('1 Lost')).toBeInTheDocument()
+      expect(screen.getByText('1 Found')).toBeInTheDocument()
+      expect(screen.getByText('1 Claimed')).toBeInTheDocument()
+    })
   })
 
   it('renders items in table', async () => {
@@ -60,7 +75,7 @@ describe('Ledger Page', () => {
       createItem({ id: 2, item_name: 'Phone', department_origin: 'Engineering', status: 'lost' }),
     ]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
     await waitFor(() => {
       expect(screen.getByText('Laptop')).toBeInTheDocument()
       expect(screen.getByText('Phone')).toBeInTheDocument()
@@ -75,7 +90,7 @@ describe('Ledger Page', () => {
       createItem({ id: 2, item_name: 'Phone', department_origin: 'Engineering' }),
     ]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
 
     await waitFor(() => { expect(screen.getByText('Laptop')).toBeInTheDocument() })
 
@@ -91,17 +106,15 @@ describe('Ledger Page', () => {
       createItem({ id: 1, item_name: 'Laptop', description: 'Dell XPS 15', status: 'found' }),
     ]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
 
     await waitFor(() => { expect(screen.getByText('Laptop')).toBeInTheDocument() })
 
     await userEvent.click(screen.getByText(/view/i))
 
-    // Check modal heading appears
     await waitFor(() => {
       expect(screen.getByText(/item #1 detail/i)).toBeInTheDocument()
     })
-    // Description appears both in table row and modal, so assert it's in DOM
     expect(screen.getAllByText(/Dell XPS/).length).toBeGreaterThanOrEqual(1)
   })
 
@@ -110,7 +123,7 @@ describe('Ledger Page', () => {
       createItem({ id: 1, item_name: 'Laptop', status: 'found' }),
     ]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
 
     await waitFor(() => { expect(screen.getByText('Laptop')).toBeInTheDocument() })
 
@@ -124,7 +137,7 @@ describe('Ledger Page', () => {
   it('has Export CSV button', async () => {
     const items = [createItem({ id: 1, item_name: 'Laptop' })]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
     await waitFor(() => { expect(screen.getByText('Laptop')).toBeInTheDocument() })
     expect(screen.getByText(/export csv/i)).toBeInTheDocument()
   })
@@ -135,7 +148,7 @@ describe('Ledger Page', () => {
       createItem({ id: 2, item_name: 'FoundItem', status: 'found' }),
     ]
     mockFetchAllItems.mockResolvedValue(items)
-    render(<Ledger />)
+    render(<AllItems />)
     await waitFor(() => {
       expect(screen.getByText('lost')).toBeInTheDocument()
       expect(screen.getByText('found')).toBeInTheDocument()

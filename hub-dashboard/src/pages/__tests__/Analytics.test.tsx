@@ -15,6 +15,7 @@ function createAnalytics(overrides: Partial<AnalyticsResult> = {}): AnalyticsRes
     totalItems: 8,
     totalFound: 6,
     totalClaimed: 3,
+    totalLost: 2,
     ...overrides,
   }
 }
@@ -40,6 +41,7 @@ describe('Analytics Page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('8')).toBeInTheDocument() // totalItems
+      expect(screen.getByText('2')).toBeInTheDocument() // totalLost
       expect(screen.getByText('50.0%')).toBeInTheDocument() // claimRate
       expect(screen.getByText('6')).toBeInTheDocument() // totalFound
     })

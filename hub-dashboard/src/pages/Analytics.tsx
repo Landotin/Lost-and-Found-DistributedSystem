@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchAnalytics, type AnalyticsResult } from '../hooks/useAdminApi'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { BarChart3, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+import { BarChart3, Loader2, AlertCircle, RefreshCw, SearchX } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,7 +90,7 @@ function Analytics() {
       ) : analytics ? (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-gray-400">Total Items</h2>
@@ -98,6 +98,15 @@ function Analytics() {
               </div>
               <p className="text-4xl font-bold text-white">{analytics.totalItems}</p>
               <p className="text-xs text-gray-500 mt-1">across all departments</p>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-gray-400">Lost Items</h2>
+                <SearchX className="w-5 h-5 text-yellow-400" />
+              </div>
+              <p className="text-4xl font-bold text-yellow-300">{analytics.totalLost}</p>
+              <p className="text-xs text-gray-500 mt-1">awaiting discovery</p>
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">

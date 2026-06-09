@@ -448,6 +448,12 @@ describe('getAnalytics', () => {
     expect(result.totalClaimed).toBe(2); // 1 CCS claimed + 1 COE claimed
   });
 
+  it('returns totalLost count', async () => {
+    const { getAnalytics } = await import('./database.js');
+    const result = await getAnalytics();
+    expect(result.totalLost).toBe(2); // 1 CCS lost + 1 COE lost
+  });
+
   it('returns claimRate as claimed / (found + claimed)', async () => {
     const { getAnalytics } = await import('./database.js');
     const result = await getAnalytics();

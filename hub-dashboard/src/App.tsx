@@ -1,13 +1,19 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, ScrollText, BarChart3, Wifi } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, SearchX, Search, CheckCircle, ScrollText, BarChart3, Wifi } from 'lucide-react'
 import Monitor from './pages/Monitor'
-import Ledger from './pages/Ledger'
+import AllItems from './pages/AllItems'
+import LostItems from './pages/LostItems'
+import FoundItems from './pages/FoundItems'
+import ClaimedItems from './pages/ClaimedItems'
 import Logs from './pages/Logs'
 import Analytics from './pages/Analytics'
 
 const navItems = [
   { to: '/monitor', label: 'Monitor', icon: LayoutDashboard },
-  { to: '/ledger', label: 'Ledger', icon: ClipboardList },
+  { to: '/all-items', label: 'All Items', icon: ClipboardList },
+  { to: '/lost-items', label: 'Lost Items', icon: SearchX },
+  { to: '/found-items', label: 'Found Items', icon: Search },
+  { to: '/claimed-items', label: 'Claimed Items', icon: CheckCircle },
   { to: '/logs', label: 'Logs', icon: ScrollText },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
 ] as const
@@ -54,7 +60,11 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/monitor" replace />} />
           <Route path="/monitor" element={<Monitor />} />
-          <Route path="/ledger" element={<Ledger />} />
+          <Route path="/all-items" element={<AllItems />} />
+          <Route path="/ledger" element={<Navigate to="/all-items" replace />} />
+          <Route path="/lost-items" element={<LostItems />} />
+          <Route path="/found-items" element={<FoundItems />} />
+          <Route path="/claimed-items" element={<ClaimedItems />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/analytics" element={<Analytics />} />
         </Routes>

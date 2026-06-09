@@ -294,6 +294,7 @@ export interface AnalyticsResult {
   totalItems: number;
   totalFound: number;
   totalClaimed: number;
+  totalLost: number;
 }
 
 export async function getAnalytics(): Promise<AnalyticsResult> {
@@ -309,13 +310,15 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
     itemsByDepartment[row.department_origin] = row.count;
   }
 
+  const lostRow = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM items WHERE status = 'lost'");
   const foundRow = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM items WHERE status = 'found'");
   const claimedRow = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM items WHERE status = 'claimed'");
 
+  const totalLost = lostRow?.count ?? 0;
   const totalFound = foundRow?.count ?? 0;
   const totalClaimed = claimedRow?.count ?? 0;
   const denominator = totalFound + totalClaimed;
   const claimRate = denominator > 0 ? totalClaimed / denominator : 0;
 
-  return { itemsByDepartment, claimRate, totalItems, totalFound, totalClaimed };
+  return { itemsByDepartment, claimRate, totalItems, totalFound, totalClaimed, totalLost };
 }

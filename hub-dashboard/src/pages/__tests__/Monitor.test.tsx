@@ -5,18 +5,24 @@ import Monitor from '../Monitor'
 
 const mockFetchHubHealth = vi.fn()
 const mockFetchNodes = vi.fn()
+const mockFetchAnalytics = vi.fn()
 const mockForceSync = vi.fn()
 const mockDisconnectNode = vi.fn()
 
 vi.mock('../../hooks/useAdminApi', () => ({
   fetchHubHealth: (...args: unknown[]) => mockFetchHubHealth(...args),
   fetchNodes: (...args: unknown[]) => mockFetchNodes(...args),
+  fetchAnalytics: (...args: unknown[]) => mockFetchAnalytics(...args),
   forceSync: (...args: unknown[]) => mockForceSync(...args),
   disconnectNode: (...args: unknown[]) => mockDisconnectNode(...args),
 }))
 
 function createMockHealth(overrides: Record<string, unknown> = {}) {
   return { uptime: 86400, nodeCount: 2, ...overrides }
+}
+
+function createMockAnalytics(overrides: Record<string, unknown> = {}) {
+  return { totalItems: 42, totalFound: 10, totalClaimed: 5, totalLost: 3, claimRate: 0.33, itemsByDepartment: {}, ...overrides }
 }
 
 function createMockNode(overrides: Record<string, unknown> = {}) {
@@ -34,6 +40,7 @@ describe('Monitor Page', () => {
   it('renders page title', () => {
     mockFetchHubHealth.mockReturnValue(new Promise(() => {}))
     mockFetchNodes.mockReturnValue(new Promise(() => {}))
+    mockFetchAnalytics.mockReturnValue(new Promise(() => {}))
     render(<Monitor />)
     expect(screen.getByText('Monitor')).toBeInTheDocument()
   })
@@ -41,6 +48,7 @@ describe('Monitor Page', () => {
   it('renders error state when API fails', async () => {
     mockFetchHubHealth.mockRejectedValue(new Error('Network error'))
     mockFetchNodes.mockRejectedValue(new Error('Network error'))
+    mockFetchAnalytics.mockRejectedValue(new Error('Network error'))
     render(<Monitor />)
     await waitFor(() => { expect(screen.getByText(/network error/i)).toBeInTheDocument() })
   })
@@ -48,6 +56,7 @@ describe('Monitor Page', () => {
   it('renders empty state when no nodes', async () => {
     mockFetchHubHealth.mockResolvedValue(createMockHealth({ nodeCount: 0 }))
     mockFetchNodes.mockResolvedValue([])
+    mockFetchAnalytics.mockResolvedValue(createMockAnalytics())
     render(<Monitor />)
     await waitFor(() => { expect(screen.getByText(/no nodes connected/i)).toBeInTheDocument() })
   })
@@ -59,6 +68,7 @@ describe('Monitor Page', () => {
     ]
     mockFetchHubHealth.mockResolvedValue(createMockHealth({ nodeCount: 2 }))
     mockFetchNodes.mockResolvedValue(nodes)
+    mockFetchAnalytics.mockResolvedValue(createMockAnalytics())
     render(<Monitor />)
     await waitFor(() => {
       expect(screen.getByText('Security')).toBeInTheDocument()
@@ -69,11 +79,13 @@ describe('Monitor Page', () => {
   it('shows retry and recovers', async () => {
     mockFetchHubHealth.mockRejectedValue(new Error('Server down'))
     mockFetchNodes.mockRejectedValue(new Error('Server down'))
+    mockFetchAnalytics.mockRejectedValue(new Error('Server down'))
     render(<Monitor />)
     await waitFor(() => { expect(screen.getByText(/retry/i)).toBeInTheDocument() })
 
     mockFetchHubHealth.mockResolvedValue(createMockHealth())
     mockFetchNodes.mockResolvedValue([])
+    mockFetchAnalytics.mockResolvedValue(createMockAnalytics())
     await userEvent.click(screen.getByText(/retry/i))
     await waitFor(() => { expect(screen.queryByText(/server down/i)).not.toBeInTheDocument() })
   })
@@ -81,6 +93,7 @@ describe('Monitor Page', () => {
   it('has action buttons for nodes', async () => {
     mockFetchHubHealth.mockResolvedValue(createMockHealth())
     mockFetchNodes.mockResolvedValue([createMockNode()])
+    mockFetchAnalytics.mockResolvedValue(createMockAnalytics())
     mockForceSync.mockResolvedValue({ success: true })
     mockDisconnectNode.mockResolvedValue({ success: true })
     render(<Monitor />)

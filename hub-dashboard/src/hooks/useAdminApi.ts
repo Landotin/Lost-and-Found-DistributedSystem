@@ -39,6 +39,7 @@ export interface AnalyticsResult {
   totalItems: number
   totalFound: number
   totalClaimed: number
+  totalLost: number
 }
 
 /** Hub health info. */

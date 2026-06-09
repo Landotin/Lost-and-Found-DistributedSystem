@@ -11,6 +11,7 @@ vi.mock('./database.js', () => {
     totalItems: 0,
     totalFound: 0,
     totalClaimed: 0,
+    totalLost: 0,
   });
   return {
     initDatabase: vi.fn().mockResolvedValue({
@@ -244,6 +245,7 @@ describe('Express Server Entry Point', () => {
         totalItems: 8,
         totalFound: 4,
         totalClaimed: 1,
+        totalLost: 3,
       });
       const res = await fetch(`http://localhost:${port}/api/admin/analytics`, {
         headers: { 'x-admin-secret': 'test-admin-secret' },
@@ -253,6 +255,7 @@ describe('Express Server Entry Point', () => {
       expect(body).toHaveProperty('itemsByDepartment');
       expect(body).toHaveProperty('claimRate');
       expect(body).toHaveProperty('totalItems');
+      expect(body).toHaveProperty('totalLost');
       expect(body.totalItems).toBe(8);
     });
   });

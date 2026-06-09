@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { fetchHubHealth, fetchNodes, forceSync, disconnectNode, type NodeInfo, type HubHealth } from '../hooks/useAdminApi'
+import { fetchHubHealth, fetchNodes, forceSync, disconnectNode, fetchAnalytics, type NodeInfo, type HubHealth, type AnalyticsResult } from '../hooks/useAdminApi'
 import { Wifi, WifiOff, RefreshCw, XCircle, Loader2, AlertCircle } from 'lucide-react'
 
 type ActionState = 'idle' | 'loading' | 'success' | 'error'
@@ -93,6 +93,7 @@ function NodeActions({ node }: { node: NodeInfo }) {
 function Monitor() {
   const [health, setHealth] = useState<HubHealth | null>(null)
   const [nodes, setNodes] = useState<NodeInfo[]>([])
+  const [analytics, setAnalytics] = useState<AnalyticsResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -100,12 +101,14 @@ function Monitor() {
     setLoading(true)
     setError(null)
     try {
-      const [healthData, nodesData] = await Promise.all([
+      const [healthData, nodesData, analyticsData] = await Promise.all([
         fetchHubHealth(),
         fetchNodes(),
+        fetchAnalytics(),
       ])
       setHealth(healthData)
       setNodes(nodesData)
+      setAnalytics(analyticsData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
@@ -184,7 +187,7 @@ function Monitor() {
           ) : error ? (
             <p className="text-2xl font-bold text-red-400">—</p>
           ) : (
-            <p className="text-4xl font-bold text-white">{nodes.length}</p>
+            <p className="text-4xl font-bold text-white">{analytics?.totalItems ?? '—'}</p>
           )}
         </div>
       </div>

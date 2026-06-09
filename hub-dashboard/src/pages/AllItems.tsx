@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchAllItems, type ItemDetail } from '../hooks/useAdminApi'
-import { Download, Search, Loader2, AlertCircle, X, Eye, WifiOff } from 'lucide-react'
+import { Download, Search, Loader2, AlertCircle, X, Eye, WifiOff, SearchX, CheckCircle } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // CSV Export
@@ -68,6 +68,33 @@ function downloadCsv(csv: string, filename: string): void {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
+// Status KPI Bar
+// ---------------------------------------------------------------------------
+
+function StatusKpiBar({ items }: { items: ItemDetail[] }) {
+  const lostCount = items.filter((i) => i.status === 'lost').length
+  const foundCount = items.filter((i) => i.status === 'found').length
+  const claimedCount = items.filter((i) => i.status === 'claimed').length
+
+  return (
+    <div className="flex gap-4 mb-6">
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-yellow-900/30 border border-yellow-800/50">
+        <SearchX className="w-4 h-4 text-yellow-400" />
+        <span className="text-sm text-yellow-300 font-medium">{lostCount} Lost</span>
+      </div>
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-900/30 border border-blue-800/50">
+        <Search className="w-4 h-4 text-blue-400" />
+        <span className="text-sm text-blue-300 font-medium">{foundCount} Found</span>
+      </div>
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-900/30 border border-green-800/50">
+        <CheckCircle className="w-4 h-4 text-green-400" />
+        <span className="text-sm text-green-300 font-medium">{claimedCount} Claimed</span>
+      </div>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +183,7 @@ function Field({ label, value, children }: { label: string; value?: string; chil
   )
 }
 
-function StatusBadge({ status }: { status: ItemDetail['status'] }) {
+export function StatusBadge({ status }: { status: ItemDetail['status'] }) {
   const styles: Record<ItemDetail['status'], string> = {
     lost: 'bg-yellow-900/50 text-yellow-300 border-yellow-700',
     found: 'bg-blue-900/50 text-blue-300 border-blue-700',
@@ -170,10 +197,10 @@ function StatusBadge({ status }: { status: ItemDetail['status'] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Main Ledger Page
+// Main All Items Page
 // ---------------------------------------------------------------------------
 
-function Ledger() {
+function AllItems() {
   const [items, setItems] = useState<ItemDetail[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -227,7 +254,7 @@ function Ledger() {
     <div className="p-8">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Global Ledger</h1>
+          <h1 className="text-3xl font-bold text-white">All Items</h1>
           <p className="text-gray-400 mt-1">Central item registry across all departments</p>
         </div>
         <button
@@ -239,6 +266,9 @@ function Ledger() {
           Export CSV
         </button>
       </div>
+
+      {/* Status KPIs */}
+      {!loading && items.length > 0 && <StatusKpiBar items={items} />}
 
       {/* Search */}
       <div className="mb-6">
@@ -311,11 +341,18 @@ function Ledger() {
                   <tr key={item.id} className="hover:bg-gray-800/50 transition-colors">
                     <td className="px-6 py-4 text-gray-400 font-mono text-xs">{item.id}</td>
                     <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium text-white">{item.item_name}</p>
-                        {item.description && (
-                          <p className="text-xs text-gray-500 truncate max-w-xs">{item.description}</p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          item.status === 'lost' ? 'bg-yellow-400' :
+                          item.status === 'found' ? 'bg-blue-400' :
+                          'bg-green-400'
+                        }`} />
+                        <div>
+                          <p className="font-medium text-white">{item.item_name}</p>
+                          {item.description && (
+                            <p className="text-xs text-gray-500 truncate max-w-xs">{item.description}</p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4"><StatusBadge status={item.status} /></td>
@@ -345,4 +382,4 @@ function Ledger() {
   )
 }
 
-export default Ledger
+export default AllItems
