@@ -116,6 +116,58 @@ describe('ConnectionManager', () => {
       expect(parsed.payload.nodes[0]).toHaveProperty('connected_at');
     }
   });
+
+  // --- Admin Node Methods ---
+
+  it('starts with zero admin nodes', () => {
+    expect(manager.getAdminNodeCount()).toBe(0);
+  });
+
+  it('addAdminNode() registers an admin socket', () => {
+    const mockSocket = { on: () => {}, readyState: 1 } as unknown as WebSocket;
+    const socketId = manager.addAdminNode(mockSocket);
+    expect(socketId).toBeDefined();
+    expect(socketId.length).toBeGreaterThan(0);
+    expect(manager.getAdminNodeCount()).toBe(1);
+  });
+
+  it('removeAdminNode() removes an admin socket', () => {
+    const mockSocket = { on: () => {}, readyState: 1 } as unknown as WebSocket;
+    const socketId = manager.addAdminNode(mockSocket);
+    expect(manager.getAdminNodeCount()).toBe(1);
+    manager.removeAdminNode(socketId);
+    expect(manager.getAdminNodeCount()).toBe(0);
+  });
+
+  it('getNode() returns undefined for unknown socketId', () => {
+    expect(manager.getNode('nonexistent')).toBeUndefined();
+  });
+
+  it('getNode() returns ConnectedNode for registered node', () => {
+    const mockSocket = { on: () => {}, readyState: 1 } as unknown as WebSocket;
+    const node = manager.registerNode(mockSocket, 'CCS');
+    const found = manager.getNode(node.socketId);
+    expect(found).toBeDefined();
+    expect(found!.deptName).toBe('CCS');
+    expect(found!.socketId).toBe(node.socketId);
+  });
+
+  it('disconnectNode() returns false for unknown socketId', () => {
+    expect(manager.disconnectNode('nonexistent')).toBe(false);
+  });
+
+  it('disconnectNode() returns true and closes socket for known node', () => {
+    let closed = false;
+    const mockSocket = {
+      on: () => {},
+      readyState: 1,
+      close: (code?: number, reason?: string) => { closed = true; },
+    } as unknown as WebSocket;
+    const node = manager.registerNode(mockSocket, 'CCS');
+    const result = manager.disconnectNode(node.socketId);
+    expect(result).toBe(true);
+    expect(closed).toBe(true);
+  });
 });
 
 describe('handleConnection — HELLO protocol', () => {
@@ -249,6 +301,50 @@ describe('handleConnection — HELLO protocol', () => {
     expect(received.socketId).toBeDefined();
     ws.close();
   });
+
+  // --- Admin HELLO ---
+
+  it('accepts valid ADMIN HELLO message and registers admin socket', async () => {
+    const ws = await createClient(port);
+    ws.send(JSON.stringify({
+      event: 'HELLO',
+      payload: { type: 'ADMIN', secret: VALID_SECRET },
+    }));
+
+    const msg = await receiveMessage(ws) as any;
+    expect(msg.event).toBe('HELLO');
+    expect(msg.payload.accepted).toBe(true);
+    expect(msg.payload.type).toBe('ADMIN');
+    expect(manager.getAdminNodeCount()).toBe(1);
+    expect(manager.getNodeCount()).toBe(0); // Admin not in regular nodes
+    ws.close();
+  });
+
+  it('rejects ADMIN HELLO with invalid secret', async () => {
+    const ws = await createClient(port);
+    const closePromise = new Promise<number>((resolve) => {
+      ws.on('close', (code) => resolve(code));
+    });
+    ws.send(JSON.stringify({
+      event: 'HELLO',
+      payload: { type: 'ADMIN', secret: 'wrong-secret' },
+    }));
+    const code = await closePromise;
+    expect(code).toBe(4001);
+  });
+
+  it('removes admin socket from tracking on close', async () => {
+    const ws = await createClient(port);
+    ws.send(JSON.stringify({
+      event: 'HELLO',
+      payload: { type: 'ADMIN', secret: VALID_SECRET },
+    }));
+    await receiveMessage(ws);
+    expect(manager.getAdminNodeCount()).toBe(1);
+    ws.close();
+    await new Promise(r => setTimeout(r, 100));
+    expect(manager.getAdminNodeCount()).toBe(0);
+  });
 });
 
 describe('broadcastToOthers', () => {
@@ -323,5 +419,72 @@ describe('broadcastToOthers', () => {
     manager.broadcastToOthers(senderNode.socketId, 'TEST', {});
     expect(received.length).toBe(0);
   });
-});
 
+  // --- Admin Broadcast in broadcastToOthers ---
+
+  it('sends unredacted broadcast to admin sockets', () => {
+    const received: string[] = [];
+    const sender = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const adminSocket = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+
+    const senderNode = manager.registerNode(sender, 'Dept Sender');
+    manager.addAdminNode(adminSocket);
+
+    manager.broadcastToOthers(senderNode.socketId, 'ITEM_BROADCAST', {
+      id: 'item-1',
+      item_name: 'Test',
+      department_origin: 'Dept Sender',
+      surrendered_by: {
+        full_name: 'Alice',
+        mobile: '09170000001',
+        id_type: 'SSS',
+        id_number: 'SSS-001',
+      },
+    });
+
+    // Admin should receive exactly 1 message (the unredacted copy)
+    expect(received.length).toBe(1);
+    const parsed = JSON.parse(received[0]);
+    expect(parsed.event).toBe('ITEM_BROADCAST');
+    // Admin receives unredacted PII
+    expect(parsed.payload.surrendered_by.mobile).toBe('09170000001');
+    expect(parsed.payload.surrendered_by.id_type).toBe('SSS');
+    expect(parsed.payload.surrendered_by.id_number).toBe('SSS-001');
+  });
+
+  it('sends broadcast to both department nodes and admin sockets', () => {
+    const received: string[] = [];
+    const sender = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const otherDept = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+    const adminSocket = {
+      on: () => {},
+      readyState: 1,
+      send: (data: string) => received.push(data),
+    } as unknown as WebSocket;
+
+    const senderNode = manager.registerNode(sender, 'Dept A');
+    manager.registerNode(otherDept, 'Dept B');
+    manager.addAdminNode(adminSocket);
+
+    manager.broadcastToOthers(senderNode.socketId, 'TEST_EVENT', { msg: 'hello' });
+
+    // otherDept + adminSocket = 2 messages
+    expect(received.length).toBe(2);
+  });
+});

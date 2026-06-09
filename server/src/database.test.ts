@@ -350,3 +350,128 @@ describe('getSyncDumpForNode', () => {
     expect(itemNames).toContain('Item from COE');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Admin query functions
+// ---------------------------------------------------------------------------
+
+describe('getAllItemsWithPII', () => {
+  let db: Database;
+
+  beforeAll(async () => {
+    cleanup();
+    db = await initDatabase(TEST_DB_PATH);
+    // Ensure test data exists
+    await db.run(
+      "INSERT OR IGNORE INTO persons (id, full_name, mobile, id_type, id_number) VALUES ('pii-person-s', 'Surr Name', '09170000999', 'Passport', 'PP-001')"
+    );
+    await db.run(
+      "INSERT OR IGNORE INTO persons (id, full_name, mobile, id_type, id_number) VALUES ('pii-person-c', 'Claim Name', '09170000888', 'SSS', 'SSS-002')"
+    );
+    await db.run(
+      `INSERT OR REPLACE INTO items (id, item_name, department_origin, status, surrendered_by, claimed_by)
+       VALUES ('pii-item-1', 'PII Item 1', 'CCS', 'found', 'pii-person-s', 'pii-person-c')`
+    );
+  });
+
+  afterAll(async () => {
+    await db.close();
+    cleanup();
+  });
+
+  it('returns items with joined person PII fields', async () => {
+    const { getAllItemsWithPII } = await import('./database.js');
+    const items = await getAllItemsWithPII();
+
+    const item = items.find((i: any) => i.id === 'pii-item-1');
+    expect(item).toBeDefined();
+    expect(item.item_name).toBe('PII Item 1');
+    // Surrenderer details should be present (unredacted)
+    expect(item.surrenderer_full_name).toBe('Surr Name');
+    expect(item.surrenderer_mobile).toBe('09170000999');
+    expect(item.surrenderer_id_type).toBe('Passport');
+    expect(item.surrenderer_id_number).toBe('PP-001');
+    // Claimant details should be present (unredacted)
+    expect(item.claimant_full_name).toBe('Claim Name');
+    expect(item.claimant_mobile).toBe('09170000888');
+    expect(item.claimant_id_type).toBe('SSS');
+    expect(item.claimant_id_number).toBe('SSS-002');
+  });
+});
+
+describe('getAnalytics', () => {
+  let db: Database;
+
+  beforeAll(async () => {
+    cleanup();
+    db = await initDatabase(TEST_DB_PATH);
+    // Insert various items for analytics testing
+    const items = [
+      { id: 'analytics-item-1', name: 'Lost Phone', dept: 'CCS', status: 'lost' },
+      { id: 'analytics-item-2', name: 'Found Wallet', dept: 'CCS', status: 'found' },
+      { id: 'analytics-item-3', name: 'Claimed Bag', dept: 'CCS', status: 'claimed' },
+      { id: 'analytics-item-4', name: 'Found Keys', dept: 'COE', status: 'found' },
+      { id: 'analytics-item-5', name: 'Claimed Laptop', dept: 'COE', status: 'claimed' },
+      { id: 'analytics-item-6', name: 'Lost ID', dept: 'COE', status: 'lost' },
+    ];
+    for (const item of items) {
+      await db.run(
+        `INSERT OR REPLACE INTO items (id, item_name, department_origin, status)
+         VALUES (?, ?, ?, ?)`,
+        item.id, item.name, item.dept, item.status
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await db.close();
+    cleanup();
+  });
+
+  it('returns totalItems count', async () => {
+    const { getAnalytics } = await import('./database.js');
+    const result = await getAnalytics();
+    expect(result.totalItems).toBe(6);
+  });
+
+  it('returns items grouped by department', async () => {
+    const { getAnalytics } = await import('./database.js');
+    const result = await getAnalytics();
+    expect(result.itemsByDepartment.CCS).toBe(3);
+    expect(result.itemsByDepartment.COE).toBe(3);
+  });
+
+  it('returns totalFound and totalClaimed counts', async () => {
+    const { getAnalytics } = await import('./database.js');
+    const result = await getAnalytics();
+    expect(result.totalFound).toBe(2); // 1 CCS found + 1 COE found
+    expect(result.totalClaimed).toBe(2); // 1 CCS claimed + 1 COE claimed
+  });
+
+  it('returns claimRate as claimed / (found + claimed)', async () => {
+    const { getAnalytics } = await import('./database.js');
+    const result = await getAnalytics();
+    // found=2, claimed=2 => claimRate = 2/4 = 0.5
+    expect(result.claimRate).toBe(0.5);
+  });
+
+  it('returns zero claimRate when no found or claimed items exist', async () => {
+    // Test with a clean database for isolation
+    const { initDatabase: initDb, getAnalytics: getAnalyticsFn } = await import('./database.js');
+    const isolatedPath = path.join(TEST_DIR, 'test-analytics-empty.db');
+    const isolatedDb = await initDb(isolatedPath);
+    // Only insert a 'lost' item
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status)
+       VALUES ('empty-item-1', 'Test', 'CCS', 'lost')`
+    );
+    const result = await getAnalyticsFn();
+    expect(result.totalItems).toBe(1);
+    expect(result.claimRate).toBe(0);
+    await isolatedDb.close();
+    // Clean up isolated db
+    try { fs.unlinkSync(isolatedPath); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
+  });
+});

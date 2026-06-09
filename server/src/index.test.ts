@@ -3,21 +3,36 @@ import http from 'node:http';
 import { WebSocket } from 'ws';
 
 // Mock the dependent modules BEFORE importing the module under test
-vi.mock('./database.js', () => ({
-  initDatabase: vi.fn().mockResolvedValue({
-    exec: vi.fn(),
-    run: vi.fn(),
-    get: vi.fn(),
-    all: vi.fn().mockResolvedValue([]),
-    close: vi.fn(),
-  }),
-  db: {
-    exec: vi.fn(),
-    run: vi.fn(),
-    get: vi.fn(),
-    all: vi.fn().mockResolvedValue([]),
-  },
-}));
+vi.mock('./database.js', () => {
+  const mockGetAllItems = vi.fn().mockResolvedValue([]);
+  const mockGetAnalytics = vi.fn().mockResolvedValue({
+    itemsByDepartment: {},
+    claimRate: 0,
+    totalItems: 0,
+    totalFound: 0,
+    totalClaimed: 0,
+  });
+  return {
+    initDatabase: vi.fn().mockResolvedValue({
+      exec: vi.fn(),
+      run: vi.fn(),
+      get: vi.fn(),
+      all: vi.fn(),
+      close: vi.fn(),
+    }),
+    db: {
+      exec: vi.fn(),
+      run: vi.fn(),
+      get: vi.fn(),
+      all: vi.fn().mockResolvedValue([]),
+    },
+    getSyncDumpForNode: vi.fn().mockResolvedValue([]),
+    savePerson: vi.fn().mockResolvedValue(undefined),
+    saveItem: vi.fn().mockResolvedValue(undefined),
+    getAllItemsWithPII: mockGetAllItems,
+    getAnalytics: mockGetAnalytics,
+  };
+});
 
 vi.mock('./connection-manager.js', () => {
   class MockConnectionManager {
@@ -27,6 +42,16 @@ vi.mock('./connection-manager.js', () => {
     removeNode = vi.fn();
     broadcastNodeList = vi.fn();
     on = vi.fn();
+    addAdminNode = vi.fn().mockReturnValue('mock-admin-id');
+    removeAdminNode = vi.fn();
+    getAdminNodeCount = vi.fn().mockReturnValue(0);
+    disconnectNode = vi.fn().mockReturnValue(true);
+    getNode = vi.fn().mockReturnValue({
+      socketId: 'mock-node-id',
+      deptName: 'Test Department',
+      connectedAt: '2025-01-01T00:00:00.000Z',
+      socket: { readyState: 1, send: vi.fn() },
+    });
   }
   return {
     ConnectionManager: MockConnectionManager,
@@ -115,5 +140,120 @@ describe('Express Server Entry Point', () => {
     const res2 = await fetch(`http://localhost:${port}/health`);
     const body2 = await res2.json() as { uptime: number };
     expect(body2.uptime - body1.uptime).toBeGreaterThanOrEqual(0.1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin API Tests (inside same describe block to share server lifecycle)
+  // ---------------------------------------------------------------------------
+
+  describe('Admin REST API', () => {
+    // --- Auth Middleware ---
+
+    it('GET /api/admin/nodes returns 401 without x-admin-secret header', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes`);
+      expect(res.status).toBe(401);
+      const body = await res.json() as { error: string };
+      expect(body.error).toContain('Unauthorized');
+    });
+
+    it('GET /api/admin/nodes returns 401 with wrong admin secret', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes`, {
+        headers: { 'x-admin-secret': 'wrong-secret' },
+      });
+      expect(res.status).toBe(401);
+      const body = await res.json() as { error: string };
+      expect(body.error).toContain('Unauthorized');
+    });
+
+    it('GET /api/admin/nodes returns node list with valid auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes`, {
+        headers: { 'x-admin-secret': 'test-admin-secret' },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as any[];
+      expect(Array.isArray(body)).toBe(true);
+    });
+
+    it('POST /api/admin/nodes/:id/disconnect requires auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes/some-id/disconnect`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('POST /api/admin/nodes/:id/disconnect succeeds with auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes/mock-node-id/disconnect`, {
+        method: 'POST',
+        headers: { 'x-admin-secret': 'test-admin-secret' },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    // --- POST /api/admin/nodes/:id/sync ---
+
+    it('POST /api/admin/nodes/:id/sync requires auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/nodes/some-id/sync`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(401);
+    });
+
+    // --- GET /api/admin/items ---
+
+    it('GET /api/admin/items requires auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/items`);
+      expect(res.status).toBe(401);
+    });
+
+    it('GET /api/admin/items returns items list with auth', async () => {
+      const { getAllItemsWithPII } = await import('./database.js');
+      vi.mocked(getAllItemsWithPII).mockResolvedValueOnce([
+        {
+          id: 'item-1',
+          item_name: 'Test Item',
+          status: 'found',
+          department_origin: 'CCS',
+          surrenderer_full_name: 'Alice',
+          surrenderer_mobile: '09170000001',
+        },
+      ]);
+      const res = await fetch(`http://localhost:${port}/api/admin/items`, {
+        headers: { 'x-admin-secret': 'test-admin-secret' },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as any[];
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.length).toBe(1);
+      expect(body[0].item_name).toBe('Test Item');
+    });
+
+    // --- GET /api/admin/analytics ---
+
+    it('GET /api/admin/analytics requires auth', async () => {
+      const res = await fetch(`http://localhost:${port}/api/admin/analytics`);
+      expect(res.status).toBe(401);
+    });
+
+    it('GET /api/admin/analytics returns analytics with auth', async () => {
+      const { getAnalytics } = await import('./database.js');
+      vi.mocked(getAnalytics).mockResolvedValueOnce({
+        itemsByDepartment: { CCS: 5, COE: 3 },
+        claimRate: 0.25,
+        totalItems: 8,
+        totalFound: 4,
+        totalClaimed: 1,
+      });
+      const res = await fetch(`http://localhost:${port}/api/admin/analytics`, {
+        headers: { 'x-admin-secret': 'test-admin-secret' },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body).toHaveProperty('itemsByDepartment');
+      expect(body).toHaveProperty('claimRate');
+      expect(body).toHaveProperty('totalItems');
+      expect(body.totalItems).toBe(8);
+    });
   });
 });

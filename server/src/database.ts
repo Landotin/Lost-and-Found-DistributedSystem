@@ -257,3 +257,65 @@ export async function getSyncDumpForNode(deptName: string): Promise<SyncDumpItem
 
   return rows;
 }
+
+// ---------------------------------------------------------------------------
+// getAllItemsWithPII – Fetch all items with full (unredacted) person details.
+// Used by the admin REST API for complete visibility.
+// ---------------------------------------------------------------------------
+
+export async function getAllItemsWithPII(): Promise<any[]> {
+  const rows = await db.all(
+    `SELECT
+       i.*,
+       s.full_name AS surrenderer_full_name,
+       s.mobile    AS surrenderer_mobile,
+       s.id_type   AS surrenderer_id_type,
+       s.id_number AS surrenderer_id_number,
+       c.full_name AS claimant_full_name,
+       c.mobile    AS claimant_mobile,
+       c.id_type   AS claimant_id_type,
+       c.id_number AS claimant_id_number
+     FROM items i
+     LEFT JOIN persons s ON s.id = i.surrendered_by
+     LEFT JOIN persons c ON c.id = i.claimed_by
+     ORDER BY i.created_at ASC`
+  );
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// getAnalytics – Aggregated stats for the admin dashboard.
+// Returns items-by-department counts, claim rate, and total item count.
+// ---------------------------------------------------------------------------
+
+export interface AnalyticsResult {
+  itemsByDepartment: Record<string, number>;
+  claimRate: number;
+  totalItems: number;
+  totalFound: number;
+  totalClaimed: number;
+}
+
+export async function getAnalytics(): Promise<AnalyticsResult> {
+  const totalRow = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM items');
+  const totalItems = totalRow?.count ?? 0;
+
+  const itemsByDept = await db.all<{ department_origin: string; count: number }[]>(
+    'SELECT department_origin, COUNT(*) as count FROM items GROUP BY department_origin ORDER BY department_origin ASC'
+  );
+
+  const itemsByDepartment: Record<string, number> = {};
+  for (const row of itemsByDept) {
+    itemsByDepartment[row.department_origin] = row.count;
+  }
+
+  const foundRow = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM items WHERE status = 'found'");
+  const claimedRow = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM items WHERE status = 'claimed'");
+
+  const totalFound = foundRow?.count ?? 0;
+  const totalClaimed = claimedRow?.count ?? 0;
+  const denominator = totalFound + totalClaimed;
+  const claimRate = denominator > 0 ? totalClaimed / denominator : 0;
+
+  return { itemsByDepartment, claimRate, totalItems, totalFound, totalClaimed };
+}

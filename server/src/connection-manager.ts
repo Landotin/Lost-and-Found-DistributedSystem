@@ -30,11 +30,17 @@ export interface WsMessage {
 
 export class ConnectionManager extends EventEmitter {
   private nodes: Map<string, ConnectedNode> = new Map();
+  /** Admin WebSocket connections that receive unredacted copies of all broadcasts */
+  private adminNodes: Map<string, WebSocket> = new Map();
 
   constructor(_wss: WebSocketServer, _validSecret: string) {
     super();
     // _wss and _validSecret reserved for future use (admin broadcast, re-auth)
   }
+
+  // ---------------------------------------------------------------------------
+  // Department Nodes
+  // ---------------------------------------------------------------------------
 
   getConnectedNodes(): ConnectedNode[] {
     return Array.from(this.nodes.values());
@@ -42,6 +48,11 @@ export class ConnectionManager extends EventEmitter {
 
   getNodeCount(): number {
     return this.nodes.size;
+  }
+
+  /** Lookup a single node by socketId. Returns undefined if not found. */
+  getNode(socketId: string): ConnectedNode | undefined {
+    return this.nodes.get(socketId);
   }
 
   registerNode(socket: WebSocket, deptName: string): ConnectedNode {
@@ -61,6 +72,16 @@ export class ConnectionManager extends EventEmitter {
 
   removeNode(socketId: string): void {
     this.nodes.delete(socketId);
+  }
+
+  /** Close a node's WebSocket connection. Returns true if the node was found. */
+  disconnectNode(socketId: string): boolean {
+    const node = this.nodes.get(socketId);
+    if (node && node.socket.readyState === WebSocket.OPEN) {
+      node.socket.close(1000, 'Disconnected by admin');
+      return true;
+    }
+    return false;
   }
 
   broadcastNodeList(): void {
@@ -87,10 +108,39 @@ export class ConnectionManager extends EventEmitter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Admin Nodes
+  // ---------------------------------------------------------------------------
+
+  /** Register a new admin WebSocket connection. Returns the assigned socketId. */
+  addAdminNode(socket: WebSocket): string {
+    const socketId = crypto.randomUUID();
+    (socket as { __socketId?: string }).__socketId = socketId;
+    this.adminNodes.set(socketId, socket);
+    return socketId;
+  }
+
+  /** Remove an admin node from tracking. */
+  removeAdminNode(socketId: string): void {
+    this.adminNodes.delete(socketId);
+  }
+
+  /** Return the number of connected admin sockets. */
+  getAdminNodeCount(): number {
+    return this.adminNodes.size;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Broadcasting
+  // ---------------------------------------------------------------------------
+
   /**
    * Send a WebSocket message to all connected department nodes
    * except the one identified by senderSocketId.
    * Redacts PII details (mobile, id_type, id_number) for unrelated department nodes.
+   *
+   * Also sends an unredacted copy of every event to all connected admin sockets
+   * for the Message Log feature.
    */
   broadcastToOthers(
     senderSocketId: string,
@@ -135,6 +185,14 @@ export class ConnectionManager extends EventEmitter {
         node.socket.send(data);
       }
     }
+
+    // Send unredacted copy to all connected admin sockets
+    const adminData = JSON.stringify({ event, payload } satisfies WsMessage);
+    for (const [, adminSocket] of this.adminNodes) {
+      if (adminSocket.readyState === WebSocket.OPEN) {
+        adminSocket.send(adminData);
+      }
+    }
   }
 }
 
@@ -167,19 +225,36 @@ export function handleConnection(
         return;
       }
 
-      const payload = parsed.payload as HelloPayload | undefined;
+      const payload = parsed.payload as Record<string, unknown> | undefined;
 
-      if (!payload || !payload.dept_secret || payload.dept_secret !== validSecret) {
+      // --- Admin HELLO ---
+      if (payload?.type === 'ADMIN') {
+        if (!payload.secret || payload.secret !== validSecret) {
+          socket.close(4001, 'Invalid admin secret');
+          return;
+        }
+        const socketId = manager.addAdminNode(socket);
+        socket.send(JSON.stringify({
+          event: 'HELLO',
+          payload: { accepted: true, type: 'ADMIN' },
+        }));
+        return;
+      }
+
+      // --- Department Node HELLO ---
+      const deptPayload = parsed.payload as HelloPayload | undefined;
+
+      if (!deptPayload || !deptPayload.dept_secret || deptPayload.dept_secret !== validSecret) {
         socket.close(4001, 'Invalid department secret');
         return;
       }
 
-      if (!payload.dept_name || payload.dept_name.trim() === '') {
+      if (!deptPayload.dept_name || deptPayload.dept_name.trim() === '') {
         socket.close(4001, 'Department name required');
         return;
       }
 
-      const node = manager.registerNode(socket, payload.dept_name);
+      const node = manager.registerNode(socket, deptPayload.dept_name);
 
       // Reply with HELLO accepted
       socket.send(JSON.stringify({
@@ -217,6 +292,7 @@ export function handleConnection(
       const socketId = (socket as { __socketId?: string }).__socketId;
       if (socketId) {
         manager.removeNode(socketId);
+        manager.removeAdminNode(socketId);
         manager.broadcastNodeList();
       }
     });
@@ -229,6 +305,7 @@ export function handleConnection(
       const socketId = (socket as { __socketId?: string }).__socketId;
       if (socketId) {
         manager.removeNode(socketId);
+        manager.removeAdminNode(socketId);
         manager.broadcastNodeList();
       }
     });

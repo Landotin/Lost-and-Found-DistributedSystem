@@ -6,31 +6,22 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed. Key fixes: reordered state machine validation before `claimed_by` check (routes.ts), hardened `saveOrUpdatePerson` against empty-string PII overwrites (database.ts), added identity transitions for idempotent same-status PATCH, extracted `normalizeMobile` to database.ts and applied in sync flat-field paths. All 193 tests pass (32 client/server + 52 hub + 109 frontend).
-*   **Current Task**: Phase 4: Claims Processing — Complete.
+*   **Task Compile**: Phase 5 Hub Backend complete — Admin REST APIs, Admin WebSocket support, and comprehensive tests.
+*   **Current Task**: Phase 5: Hub Admin Backend — Complete.
 *   **Completed Tasks**:
-    *   `[x]` Phase 3: Global Ledger — real-time item table with filter/search on node.
-    *   `[x]` Integrate SYNC_DUMP handshake (hub seeds new node with full state).
-    *   `[x]` Test ITEM_BROADCAST propagation between nodes.
-    *   `[x]` Fixed database `SQLITE_CONSTRAINT` foreign key error on client nodes when receiving flat-fields inside `SYNC_DUMP` payload (ERR-007).
-    *   `[x]` Prevented overwriting valid database person details with `[REDACTED]` values during subsequent synchronization events.
-    *   `[x]` Verified synchronization, claim flows, and edge cases via unit tests and local `curl` runs.
-    *   `[x]` Bugfix: `markItemSynced` missing import in routes.ts causing 500 on claim (ERR-008).
-    *   `[x]` Bugfix: Bidirectional heartbeat ACK failure causing constant disconnects (ERR-009).
-    *   `[x]` Full Phase 3 curl verification: 133 tests covering health, person CRUD, item CRUD, Global Ledger listing, status update/claim flow, cross-dept PII redaction, offline sync queue flush, and error/edge cases.
-    *   `[x]` Phase 4 Backend: Strict state machine validation (`lost → found → claimed`) in `routes.ts`.
-    *   `[x]` Phase 4 Backend: Mobile number normalization (Philippine `09...` → `+639...`) in `routes.ts`.
-    *   `[x]` Phase 4 Backend: 6 new integration tests for state transitions (all passing).
-    *   `[x]` Phase 4 Frontend: Refactored `validateMobile` to accept Philippine `09...` format, added `formatMobileToE164` utility.
-    *   `[x]` Phase 4 Frontend: Created `ProcessClaim` component with item search/dropdown (found items only), claimant form, E.164 conversion on submit, and success/error/loading states.
-    *   `[x]` Phase 4 Frontend: Added `[Process Claim]` button in Global Ledger DetailModal for found items, wired callback to switch tab.
-    *   `[x]` Phase 4 Frontend: Added "Process Claim" tab in App navigation with `processClaimItemId` state for preselection.
-    *   `[x]` Phase 4 Frontend: 136 tests passing (12 files) — validation, ProcessClaim, GlobalLedger, App.
-    *   `[x]` Code Review Fix: Reordered state machine check before `claimed_by` validation — users get the correct error first.
-    *   `[x]` Code Review Fix: Hardened `saveOrUpdatePerson` guard — empty strings no longer overwrite real PII, not just `[REDACTED]`.
-    *   `[x]` Code Review Fix: Added identity transitions (`same→same`) to `VALID_TRANSITIONS` — PATCH with current status is a no-op `200`, not `400`.
-    *   `[x]` Code Review Fix: Extracted `normalizeMobile` to `database.ts` and applied in SYNC_DUMP/ITEM_BROADCAST/STATUS_UPDATE flat-field reconstruction — consistent E.164 across all paths.
-    *   `[x]` Code Review Fix: Moved `VALID_TRANSITIONS` to module-level constant — avoids per-request allocation.
+    *   `[x]` Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed.
+    *   `[x]` Phase 5: Added `adminAuth` Express middleware checking `x-admin-secret` header against `ADMIN_SECRET`.
+    *   `[x]` Phase 5: Implemented `GET /api/admin/nodes` returning connected node list (socketId, deptName, connectedAt).
+    *   `[x]` Phase 5: Implemented `POST /api/admin/nodes/:id/disconnect` to force-disconnect a node.
+    *   `[x]` Phase 5: Implemented `POST /api/admin/nodes/:id/sync` to trigger SYNC_DUMP to a specific node.
+    *   `[x]` Phase 5: Implemented `GET /api/admin/items` returning all items with full joined person PII (unredacted).
+    *   `[x]` Phase 5: Implemented `GET /api/admin/analytics` returning items-by-department, claim rate, total items.
+    *   `[x]` Phase 5: Added admin WebSocket support — `HELLO` with `{ type: 'ADMIN', secret }` registers into separate `adminNodes` map, skips node registration.
+    *   `[x]` Phase 5: `broadcastToOthers` sends exact unredacted copy of every event to all connected admin sockets.
+    *   `[x]` Phase 5: Added `getNode()`, `disconnectNode()`, `addAdminNode()`, `removeAdminNode()`, `getAdminNodeCount()` to ConnectionManager.
+    *   `[x]` Phase 5: Added `getAllItemsWithPII()` and `getAnalytics()` to database module.
+    *   `[x]` Phase 5: 80 passing tests (up from 52) — 5 test files all green.
+    *   `[x]` Phase 5: All existing integration tests (PII redaction, SYNC_DUMP, ITEM_BROADCAST) continue to pass.
 *   **Pending Tasks**: None.
 
 ---
@@ -126,8 +117,9 @@ This file tracks the historical context, architectural decisions, completed mile
 ---
 
 ## 3. Current Focus & Next Steps
-1.  Phase 4 complete. Next phase (Phase 5) TBD.
-2.  End-to-end verification of the full claim flow across multiple nodes.
+1.  Phase 5 complete — 80 hub tests passing.
+2.  End-to-end verification of admin APIs and admin WebSocket.
+3.  Next phase (Phase 6) TBD — potentially frontend admin dashboard or client/node admin integrations.
 
 ---
 
@@ -213,7 +205,23 @@ This file tracks the historical context, architectural decisions, completed mile
     - `client/server/src/routes.ts` — state machine transition table, `normalizeMobile` helper
     - `client/server/src/index.test.ts` — 6 new state transition tests
 
-### Session: 2026-06-09 (Code Review Fixes — Validation Ordering, PII Guard, Idempotency)
+### Session: 2026-06-09 (Phase 5 Hub Backend — Admin REST APIs & WebSocket)
+*   **Scope**: Implemented Admin REST APIs and Admin WebSocket support in the Central Hub (`server` directory).
+*   **API Authorization**: Added `adminAuth` Express middleware that checks the `x-admin-secret` header against `process.env.ADMIN_SECRET` for all `/api/admin/*` routes.
+*   **Admin REST Endpoints** (all in `server/src/index.ts`):
+    - `GET /api/admin/nodes` — returns list of connected nodes with `socketId`, `deptName`, `connectedAt`.
+    - `POST /api/admin/nodes/:id/disconnect` — force-disconnects a node socket with code 1000.
+    - `POST /api/admin/nodes/:id/sync` — triggers a complete `SYNC_DUMP` to the targeted node.
+    - `GET /api/admin/items` — fetches all items with full unredacted PII via `LEFT JOIN` on `persons`.
+    - `GET /api/admin/analytics` — returns `itemsByDepartment`, `claimRate` (`claimed / (found + claimed)`), `totalItems`, `totalFound`, `totalClaimed`.
+*   **Admin WebSocket** (in `server/src/connection-manager.ts`):
+    - `handleConnection` now accepts `HELLO` with `{ payload: { type: 'ADMIN', secret: '...' } }`.
+    - Admin sockets are tracked in a separate `adminNodes` Map (not registered as regular nodes).
+    - `broadcastToOthers` sends exact unredacted copies of every event (`ITEM_BROADCAST`, `STATUS_UPDATE`, etc.) to all connected admin sockets.
+    - Cleanup on close/error handles both admin and regular node sockets.
+*   **New ConnectionManager methods**: `getNode()`, `disconnectNode()`, `addAdminNode()`, `removeAdminNode()`, `getAdminNodeCount()`.
+*   **New database functions**: `getAllItemsWithPII()` (unredacted JOIN query), `getAnalytics()` (aggregated stats).
+*   **Test Results**: All 80 tests pass across 5 test files (up from 52 before Phase 5). Existing integration tests for PII redaction, SYNC_DUMP, ITEM_BROADCAST, and STATUS_UPDATE continue to pass.
 *   **Scope**: Addressed all 5 findings from high-effort code review across 7 review angles.
 *   **Finding 1 (HIGH) — claimed_by check before state machine**: `PATCH /items/:id/status` validated `claimed_by` required before checking state transitions, producing misleading errors (e.g., "claimed_by is required" instead of "Cannot transition from lost to claimed"). **Fix**: Moved state machine check before `claimed_by` validation.
 *   **Finding 2 (HIGH) — Empty-string PII overwrite in sync paths**: `handleIncomingItem` and `handleIncomingStatusUpdate` in `database.ts` defaulted missing mobile to `""` in flat-field reconstruction. The `saveOrUpdatePerson` guard only protected against `"[REDACTED]"` — empty strings silently overwrote real PII. **Fix**: Changed defaults from `?? ''` to `?? undefined`, and widened `saveOrUpdatePerson` guard to `(!person.mobile || person.mobile === '[REDACTED]')`.

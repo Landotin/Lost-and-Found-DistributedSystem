@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { WebSocketServer } from 'ws';
-import { initDatabase, getSyncDumpForNode, savePerson, saveItem, db } from './database.js';
+import { initDatabase, getSyncDumpForNode, savePerson, saveItem, getAllItemsWithPII, getAnalytics, db } from './database.js';
 import { ConnectionManager, handleConnection } from './connection-manager.js';
 import { HeartbeatManager } from './heartbeat.js';
 import { fileURLToPath } from 'url';
@@ -26,6 +26,92 @@ app.get('/health', (_req, res) => {
     uptime: (Date.now() - startTime) / 1000,
     nodeCount: manager ? manager.getNodeCount() : 0,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Admin REST API — all routes protected by x-admin-secret header
+// ---------------------------------------------------------------------------
+
+function adminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    res.status(500).json({ error: 'ADMIN_SECRET not configured on server' });
+    return;
+  }
+  const secret = req.headers['x-admin-secret'];
+  if (!secret || secret !== adminSecret) {
+    res.status(401).json({ error: 'Unauthorized: invalid or missing admin secret' });
+    return;
+  }
+  next();
+}
+
+// GET /api/admin/nodes — list connected department nodes
+app.get('/api/admin/nodes', adminAuth, (_req, res) => {
+  const nodes = manager!.getConnectedNodes().map(n => ({
+    socketId: n.socketId,
+    deptName: n.deptName,
+    connectedAt: n.connectedAt,
+  }));
+  res.json(nodes);
+});
+
+// POST /api/admin/nodes/:id/disconnect — force-disconnect a department node
+app.post('/api/admin/nodes/:id/disconnect', adminAuth, (req, res) => {
+  const { id } = req.params;
+  const disconnected = manager!.disconnectNode(id);
+  if (disconnected) {
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Node not found' });
+  }
+});
+
+// POST /api/admin/nodes/:id/sync — trigger a SYNC_DUMP to a specific node
+app.post('/api/admin/nodes/:id/sync', adminAuth, async (req, res) => {
+  const { id } = req.params;
+  const node = manager!.getNode(id);
+  if (!node) {
+    res.status(404).json({ error: 'Node not found' });
+    return;
+  }
+  try {
+    const items = await getSyncDumpForNode(node.deptName);
+    if (node.socket.readyState === 1 /* WebSocket.OPEN */) {
+      node.socket.send(JSON.stringify({
+        event: 'SYNC_DUMP',
+        payload: { items },
+      }));
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: 'Node socket is not open' });
+    }
+  } catch (err) {
+    console.error('Failed to send SYNC_DUMP:', err);
+    res.status(500).json({ error: 'Failed to send SYNC_DUMP' });
+  }
+});
+
+// GET /api/admin/items — fetch all items with full (unredacted) PII
+app.get('/api/admin/items', adminAuth, async (_req, res) => {
+  try {
+    const items = await getAllItemsWithPII();
+    res.json(items);
+  } catch (err) {
+    console.error('Failed to fetch items:', err);
+    res.status(500).json({ error: 'Failed to fetch items' });
+  }
+});
+
+// GET /api/admin/analytics — aggregated stats
+app.get('/api/admin/analytics', adminAuth, async (_req, res) => {
+  try {
+    const analytics = await getAnalytics();
+    res.json(analytics);
+  } catch (err) {
+    console.error('Failed to fetch analytics:', err);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
 });
 
 export async function startServer(): Promise<http.Server> {
