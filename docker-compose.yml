@@ -2,11 +2,15 @@ services:
   hub_dashboard:
     build:
       context: ./hub-dashboard
+      args:
+        - VITE_HUB_API_URL=${VITE_HUB_API_URL:-http://localhost:5000}
+        - VITE_HUB_WS_URL=${VITE_HUB_WS_URL:-ws://localhost:5000}
+        - VITE_ADMIN_SECRET=${ADMIN_SECRET:-changeme}
     ports:
       - "5005:80"
     environment:
-      - VITE_HUB_API_URL=http://hub:5000/api
-      - VITE_HUB_WS_URL=ws://hub:5000
+      - VITE_HUB_API_URL=${VITE_HUB_API_URL:-http://localhost:5000}
+      - VITE_HUB_WS_URL=${VITE_HUB_WS_URL:-ws://localhost:5000}
       - VITE_ADMIN_SECRET=${ADMIN_SECRET:-changeme}
     depends_on:
       - hub
@@ -36,7 +40,7 @@ services:
       - "5001:3000"
     environment:
       - DEPT_NAME=College of Computer Studies
-      - SERVER_WS_URL=ws://hub:5000
+      - SERVER_WS_URL=${SERVER_WS_URL:-ws://hub:5000}
       - DEPT_SECRET=${ADMIN_SECRET:-changeme}
       - PORT=3000
       - NODE_ENV=production
@@ -51,7 +55,7 @@ services:
       - "5002:3000"
     environment:
       - DEPT_NAME=College of Engineering
-      - SERVER_WS_URL=ws://hub:5000
+      - SERVER_WS_URL=${SERVER_WS_URL:-ws://hub:5000}
       - DEPT_SECRET=${ADMIN_SECRET:-changeme}
       - PORT=3000
       - NODE_ENV=production

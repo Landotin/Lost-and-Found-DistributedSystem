@@ -51,45 +51,77 @@ docker compose up --build -d
 
 ## Horizontal Scaling (Using Two Laptops)
 
-To demonstrate horizontal scaling across physical machines, distribute the services across two laptops connected to the same local network:
+To demonstrate horizontal scaling across physical machines, you can distribute the services across two laptops connected to the same local network. 
 
-### 1. Host the Hub on Laptop A
-1. Get the local IP address of **Laptop A**:
+### Step 1: Network & Firewall Prep (On Both Laptops)
+1. Ensure both laptops are connected to the same Wi-Fi network or router.
+2. Get the local IP address of **Laptop A** (which will host the Central Hub):
    ```bash
    hostname -I | awk '{print $1}'
    # Let's assume this returns: 192.168.1.100
    ```
-2. Allow incoming traffic on port 5000:
+3. Open ports **5000** (Hub) and **5005** (Dashboard) on **Laptop A**'s firewall to allow Laptop B to connect:
    ```bash
    sudo ufw allow 5000/tcp
-   ```
-3. Run the Central Hub:
-   ```bash
-   cd server
-   PORT=5000 ADMIN_SECRET=e2e-test-secret DB_PATH=../data/hub.db npx tsx src/index.ts
+   sudo ufw allow 5005/tcp
    ```
 
-### 2. Host Department Nodes on Laptop B
-Run the client/server backends on **Laptop B**, directing them to point to Laptop A's IP address:
+---
 
+### Option A: Bare-Metal Setup (No Docker)
+
+#### 1. On Laptop A (Hub & Dashboard)
+Run the Central Hub server and the Admin Dashboard.
+*   **Central Hub**:
+    ```bash
+    cd server
+    PORT=5000 ADMIN_SECRET=e2e-test-secret DB_PATH=../data/hub.db npx tsx src/index.ts
+    ```
+*   **Admin Dashboard** (Open another terminal):
+    ```bash
+    cd hub-dashboard
+    VITE_HUB_API_URL="http://192.168.1.100:5000" VITE_HUB_WS_URL="ws://192.168.1.100:5000" VITE_ADMIN_SECRET="e2e-test-secret" npm run dev -- --port 5005 --host
+    ```
+
+#### 2. On Laptop B (Department Nodes)
+Point the node backends to Laptop A's IP address:
 *   **Security Node (Port 3001)**:
     ```bash
     cd client/server
     PORT=3001 DEPT_NAME="Security" DEPT_SECRET=e2e-test-secret SERVER_WS_URL=ws://192.168.1.100:5000 NODE_ENV=production DB_PATH=../../data/security.db npx tsx src/index.ts
     ```
-*   **Engineering Node (Port 3002)**:
+*   **Engineering Node (Port 3002)** (Open another terminal):
     ```bash
     cd client/server
     PORT=3002 DEPT_NAME="Engineering" DEPT_SECRET=e2e-test-secret SERVER_WS_URL=ws://192.168.1.100:5000 NODE_ENV=production DB_PATH=../../data/engineering.db npx tsx src/index.ts
     ```
 
-### 3. Run the Admin Dashboard (Either Laptop)
-```bash
-cd hub-dashboard
-VITE_HUB_API_URL="http://192.168.1.100:5000" VITE_HUB_WS_URL="ws://192.168.1.100:5000" VITE_ADMIN_SECRET="e2e-test-secret" npm run dev -- --port 5005 --host
-```
+---
 
-Now you can access the UIs from Laptop B (`http://localhost:3001` and `http://localhost:3002`) and watch changes propagate across the local network to Laptop A in real time.
+### Option B: Docker Compose Setup
+
+#### 1. On Laptop A (Hub & Dashboard)
+Build and run only the `hub` and `hub_dashboard` containers. We must pass Laptop A's IP address as build arguments so that the compiled React bundle on Laptop A knows how to contact the Hub API.
+```bash
+# Start containerized Hub and Dashboard
+VITE_HUB_API_URL="http://192.168.1.100:5000" \
+VITE_HUB_WS_URL="ws://192.168.1.100:5000" \
+ADMIN_SECRET="e2e-test-secret" \
+sudo -E docker compose up --build -d hub hub_dashboard
+```
+*   **Dashboard URL**: `http://localhost:5005` (from either laptop, or `http://192.168.1.100:5005`).
+
+#### 2. On Laptop B (Department Nodes)
+Clone/copy the workspace to Laptop B, then build and run the department nodes containerized. We use the `--no-deps` flag to start the nodes without starting a local Hub container on Laptop B.
+```bash
+# Start containerized CCS & COE nodes pointing to Laptop A's Hub
+SERVER_WS_URL="ws://192.168.1.100:5000" \
+ADMIN_SECRET="e2e-test-secret" \
+sudo -E docker compose up --build -d --no-deps dept_ccs dept_coe
+```
+*   **Security Node**: Accessible at `http://localhost:5001` on Laptop B.
+*   **Engineering Node**: Accessible at `http://localhost:5002` on Laptop B.
+
 
 ---
 
