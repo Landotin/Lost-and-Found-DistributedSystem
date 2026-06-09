@@ -47,7 +47,16 @@ As the developer agent, you must strictly adhere to the following rules:
 For any development task, follow the lifecycle below:
 1.  **Read and Align**: Check `AGENTS.md` (this file), `MEMORY.md`, and `Context/PRD.md` before making changes.
 2.  **Verify & Log Errors**: Practice TDD. Write failing tests first, implement the code to pass the tests, and run automated checks to verify correctness. Log any compile-time or runtime errors into `Context/ERROR.md`. Once an error is resolved, update its entry in the registry to `Status: Resolved`, documenting the exact root cause and resolution. Reference the error ID (e.g., `ERR-001`) in code comments to clarify complex logic or workarounds.
-3.  **Maintain Memory**: Update `MEMORY.md` at the end of each session or task to keep track of decisions, state, and next steps. Specifically, ensure `MEMORY.md` tracks:
+3.  **Run Integration Tests**: After implementing features or fixing bugs, run the comprehensive curl integration test suite to verify end-to-end behavior:
+    ```bash
+    # Clean start (optional — removes old database files):
+    rm -f server/data/hub.db* client/server/data/*.db* data/hub.db* data/node.db*
+    # Run all 84+ tests:
+    bash test_all_phases.sh
+    ```
+    Or use the `/verify` slash command to invoke the skill which runs the same suite.
+    The script auto-starts Hub (port 5000), Security (3001), and Engineering (3002) nodes, runs all Phase 1-5 tests plus edge cases, and reports pass/fail counts. Address any failures before considering the task complete.
+4.  **Maintain Memory**: Update `MEMORY.md` at the end of each session or task to keep track of decisions, state, and next steps. Specifically, ensure `MEMORY.md` tracks:
     *   **Append-Only History**: Always append new architectural decisions (ADRs) or session progress logs rather than overwriting historical memory, retaining a clean audit trail of project changes.
     *   **Task Compile**: A high-level compilation/summary of the work executed.
     *   **Completed Tasks**: Tasks successfully finished in the current run (marked with `[x]`).

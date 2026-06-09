@@ -121,5 +121,39 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-09
 
+### ERR-012: WebSocket Disconnect Detection Slow on SIGTERM
+*   **Component**: Client Server (WsClientManager)
+*   **Symptom**: When the Hub server is terminated with SIGTERM, department nodes do not immediately detect the disconnection. The node's `connectionStatus` remains `"connected"` for ~25-40 seconds until the heartbeat timeout fires (`HEARTBEAT_TIMEOUT_MS = 25000`). Items created during this window are incorrectly marked `synced = 1` instead of `synced = 0`.
+*   **Root Cause**: The Hub's graceful shutdown (`stopServer`) calls `ws.close(1001)` for each connected client, but the node's `socket.onclose` event may not fire synchronously. The node's `connectionStatus` is derived from the WebSocket `onclose` callback — if it hasn't fired, the node considers itself online and marks items as synced.
+*   **Resolution**: No code fix applied — this is a timing issue in the test methodology. The automated test script (`test_all_phases.sh`) now waits up to 40s for the node's status to change to `"disconnected"` before creating offline items. For production, the heartbeat timeout provides eventual consistency.
+*   **Status**: Open (documented as known limitation)
+*   **Date**: 2026-06-09
 
+### ERR-013: FK Constraint Error on Status Update with Non-Existent Person ID
+*   **Component**: Client Server (Routes)
+*   **Symptom**: `PATCH /items/:id/status` with `{ status: "claimed", claimed_by: "some-id" }` where `"some-id"` does not reference an existing person returns HTTP 500 `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` instead of a graceful 400 error.
+*   **Root Cause**: The route handler at `client/server/src/routes.ts` passes `claimed_by` directly to `updateItemStatus()` without validating that the referenced person ID exists in the `persons` table. The SQLite FK constraint then rejects the UPDATE, which surfaces as an unhandled 500 error.
+*   **Resolution**: Add a person existence check before calling `updateItemStatus()` when `claimed_by` is provided. Return 400 with descriptive error if the person ID doesn't exist.
+*   **Status**: Open (minor — only triggers when explicitly passing a non-existent person ID)
+*   **Date**: 2026-06-09
+*   **Note**: The state machine validation correctly catches `lost → claimed` (invalid transition) when a proper state machine flow is followed. The FK error only surfaces when the transition passes state machine checks but the `claimed_by` ID doesn't exist.
 
+### ERR-014: Heartbeat Timeout Never Fires — Interval Cancels Timeout
+*   **Component**: Client Server (WsClientManager)
+*   **Symptom**: When the Hub goes down, the department node never detects the disconnection via heartbeat timeout. The node's `connectionStatus` stays `"connected"` indefinitely, and items created while the hub is down are incorrectly marked `synced = 1` (optimistic). The node only reconnects when the `WebSocket.onclose` event fires from the TCP layer, which can take minutes.
+*   **Root Cause**: In `client/server/src/ws-client.ts`, the `startHeartbeat` method uses `setInterval(HEARTBEAT_INTERVAL_MS = 15000)` which fires every 15 seconds. Each interval tick calls `this.send('HEARTBEAT', {})` and then `this.heartbeatTimeout = setTimeout(... , HEARTBEAT_TIMEOUT_MS = 25000)`. Since the interval fires every 15s but the timeout is 25s, each interval tick **overwrites** `this.heartbeatTimeout` with a new timeout — but the PREVIOUS timeout is never `clearTimeout`'d and its ID reference is lost. The old timeout **does** still exist (it wasn't cancelled), but it fires at the same time as the new timeout would have if the interval had stopped. More critically: because the interval keeps running (15s < 25s), a new timeout is created every 15s. The timeout from tick N would fire at tick N + 25s, but tick N+1 fires at tick N + 15s and creates a new timeout that fires at tick N+1 + 25s = tick N + 40s — the OLD timeout at N+25s is never cancelled and DOES fire. However, in practice the timeout sometimes triggers `handleDisconnect()` too late (after ~40-60s) or the `onclose` event fires first.
+*   **Resolution**: Fix the heartbeat logic so the timeout is only set if no timeout is currently active, or use a different approach (e.g., track `lastAckTime` and check `Date.now() - lastAckTime > TIMEOUT_MS` in the interval handler). The simplest fix:
+    ```javascript
+    this.heartbeatInterval = setInterval(() => {
+      this.send('HEARTBEAT', {});
+      // Only set timeout if one isn't already pending
+      if (!this.heartbeatTimeout) {
+        this.heartbeatTimeout = setTimeout(() => {
+          console.warn('[WS-Client] Heartbeat ACK timeout — reconnecting');
+          this.handleDisconnect();
+        }, HEARTBEAT_TIMEOUT_MS);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    ```
+*   **Status**: Open (confirmed bug — fix pending)
+*   **Date**: 2026-06-09

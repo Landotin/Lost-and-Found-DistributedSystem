@@ -36,3 +36,4 @@ Thumbs.db
 start-*.sh
 !.claude/skills/*.sh
 /Context/SPECS_GATHERED.md
+.worktrees/
