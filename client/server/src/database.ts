@@ -129,11 +129,21 @@ export async function saveOrUpdatePerson(person: Person): Promise<void> {
     return;
   }
 
-  // Update existing person — guard against overwriting a valid mobile with "[REDACTED]"
+  // Update existing person — guard against overwriting a valid mobile/id_type/id_number with "[REDACTED]"
   const mobile =
     person.mobile === '[REDACTED]' && existing.mobile !== '[REDACTED]'
       ? existing.mobile
       : person.mobile;
+
+  const id_type =
+    person.id_type === '[REDACTED]' && existing.id_type !== '[REDACTED]'
+      ? existing.id_type
+      : person.id_type;
+
+  const id_number =
+    person.id_number === '[REDACTED]' && existing.id_number !== '[REDACTED]'
+      ? existing.id_number
+      : person.id_number;
 
   await db.run(
     `UPDATE persons
@@ -142,7 +152,7 @@ export async function saveOrUpdatePerson(person: Person): Promise<void> {
             id_type   = ?,
             id_number = ?
       WHERE id = ?`,
-    [person.full_name, mobile, person.id_type ?? null, person.id_number ?? null, person.id]
+    [person.full_name, mobile, id_type ?? null, id_number ?? null, person.id]
   );
 }
 
@@ -219,7 +229,7 @@ export async function handleIncomingItem(payload: {
   department_origin: string;
   status: string;
   surrendered_by?: string | Person | null;
-  claimed_by?: string | null;
+  claimed_by?: string | Person | null;
   claimed_at?: string | null;
   updated_at?: string;
   created_at?: string;
@@ -233,8 +243,37 @@ export async function handleIncomingItem(payload: {
     surrendererPerson = payload.surrendered_by as Person;
   }
 
+  // Support flat fields from SYNC_DUMP (where surrendered_by is a string ID but flat fields are on payload)
+  if (!surrendererPerson && payload.surrendered_by && typeof payload.surrendered_by === 'string' && (payload as any).surrenderer_full_name) {
+    surrendererPerson = {
+      id: payload.surrendered_by,
+      full_name: (payload as any).surrenderer_full_name,
+      mobile: (payload as any).surrenderer_mobile ?? '',
+      id_type: (payload as any).surrenderer_id_type ?? undefined,
+      id_number: (payload as any).surrenderer_id_number ?? undefined,
+    };
+  }
+
   if (surrendererPerson) {
     await saveOrUpdatePerson(surrendererPerson);
+  }
+
+  // Handle claimant person if provided as an object or flat fields from SYNC_DUMP
+  let claimantPerson: Person | undefined;
+  if (payload.claimed_by && typeof payload.claimed_by === 'object') {
+    claimantPerson = payload.claimed_by as Person;
+  } else if (payload.claimed_by && typeof payload.claimed_by === 'string' && (payload as any).claimant_full_name) {
+    claimantPerson = {
+      id: payload.claimed_by,
+      full_name: (payload as any).claimant_full_name,
+      mobile: (payload as any).claimant_mobile ?? '',
+      id_type: (payload as any).claimant_id_type ?? undefined,
+      id_number: (payload as any).claimant_id_number ?? undefined,
+    };
+  }
+
+  if (claimantPerson) {
+    await saveOrUpdatePerson(claimantPerson);
   }
 
   // Normalize surrendered_by to a string (person ID) for database storage
@@ -242,6 +281,12 @@ export async function handleIncomingItem(payload: {
     payload.surrendered_by && typeof payload.surrendered_by === 'object'
       ? (payload.surrendered_by as Person).id
       : (payload.surrendered_by as string | null) ?? null;
+
+  // Normalize claimed_by to a string (person ID) for database storage
+  const claimedById: string | null =
+    payload.claimed_by && typeof payload.claimed_by === 'object'
+      ? (payload.claimed_by as Person).id
+      : (payload.claimed_by as string | null) ?? null;
 
   // 2. Check if the item already exists (for LWW comparison)
   const existing = await getItemById(payload.id);
@@ -281,7 +326,7 @@ export async function handleIncomingItem(payload: {
         payload.department_origin,
         payload.status,
         surrenderedById,
-        payload.claimed_by ?? null,
+        claimedById,
         payload.claimed_at ?? null,
         payload.updated_at ?? new Date().toISOString(),
         payload.id,
@@ -301,7 +346,7 @@ export async function handleIncomingItem(payload: {
         payload.department_origin,
         payload.status,
         surrenderedById,
-        payload.claimed_by ?? null,
+        claimedById,
         payload.claimed_at ?? null,
         payload.updated_at ?? new Date().toISOString(),
         payload.created_at ?? new Date().toISOString(),
@@ -324,9 +369,22 @@ export async function handleIncomingStatusUpdate(payload: {
   claimed_by?: string | Person | null;
   updated_at?: string;
 }): Promise<void> {
-  // 1. Save the claimant person if provided as a full Person object
+  // 1. Save the claimant person if provided as a full Person object or flat details
+  let claimantPerson: Person | undefined;
   if (payload.claimed_by && typeof payload.claimed_by === 'object') {
-    await saveOrUpdatePerson(payload.claimed_by as Person);
+    claimantPerson = payload.claimed_by as Person;
+  } else if (payload.claimed_by && typeof payload.claimed_by === 'string' && (payload as any).claimant_full_name) {
+    claimantPerson = {
+      id: payload.claimed_by,
+      full_name: (payload as any).claimant_full_name,
+      mobile: (payload as any).claimant_mobile ?? '',
+      id_type: (payload as any).claimant_id_type ?? undefined,
+      id_number: (payload as any).claimant_id_number ?? undefined,
+    };
+  }
+
+  if (claimantPerson) {
+    await saveOrUpdatePerson(claimantPerson);
   }
 
   // Normalize claimed_by to a string (person ID) for database storage

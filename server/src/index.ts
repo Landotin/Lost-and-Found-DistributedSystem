@@ -74,6 +74,16 @@ export async function startServer(): Promise<http.Server> {
       return;
     }
 
+    // Respond to node heartbeats with ACK so the node doesn't timeout
+    if (message.event === 'HEARTBEAT') {
+      const nodes = manager.getConnectedNodes();
+      const node = nodes.find(n => n.socketId === socketId);
+      if (node && node.socket.readyState === 1 /* WebSocket.OPEN */) {
+        node.socket.send(JSON.stringify({ event: 'ACK', payload: { timestamp: Date.now() } }));
+      }
+      return;
+    }
+
     // Handle ITEM_BROADCAST: save item and person, broadcast to others
     if (message.event === 'ITEM_BROADCAST') {
       const payload = message.payload as any;

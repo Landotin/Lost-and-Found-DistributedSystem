@@ -6,24 +6,18 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 3 Global Ledger completed. Dynamic item listing, filtration by status and department, title search, and real-time PII-redacting synchronizations are verified.
-*   **Current Task**: Ready for Phase 4: Claims Processing.
+*   **Task Compile**: Phase 3 Global Ledger fully verified. Executed 133 manual curl tests across 7 categories (health, persons, items, claims, PII redaction, offline sync, error/edge cases). Found and fixed 2 critical bugs: missing `markItemSynced` import (ERR-008) and bidirectional heartbeat ACK failure causing constant reconnections (ERR-009). All 78 automated tests pass (52 hub + 26 client).
+*   **Current Task**: Phase 4: Claims Processing.
 *   **Completed Tasks**:
-    *   `[x]` Reviewed and corrected custom agent configurations in `.claude/agents/` (corrected tool names to standard Claude Code conventions and moved `code-reviewer.md` to `agents/` directory).
-    *   `[x]` PRD alignment checks.
-    *   `[x]` Created instructions layer (`AGENTS.md`) with TDD rules, coding standards, readability guidelines, OpenSrc settings, append-only memory rules, and error-resolution workflows.
-    *   `[x]` Created error registry (`Context/ERROR.md`) with template schemas.
-    *   `[x]` Created documentation reference (`Context/docs/best-practices.md`) outlining ws/Express port sharing, SQLite WAL, React state hooks, Tailwind LED styling, and Docker orchestration.
-    *   `[x]` Created multi-agent workflow guide (`Context/docs/multi-agent-workflow.md`) defining Spec Gatherer -> Planner -> Worker worktree allocation.
-    *   `[x]` Created Claude Code setup instructions (`Context/docs/claude-code-setup.md`) detailing environment variables for Gemini Pro, Deepseek Pro, and Deepseek Flash integration.
-    *   `[x]` Created root `.gitignore` to prevent secret leaks, local databases, and temporary agent scripts from being committed.
-    *   `[x]` Created Spec Gatherer instructions file (`Context/tasks/gatherer_instructions.md`) to bootstrap context collection.
-    *   `[x]` Phase 1: Bootstrapped backend (`server/`) and frontend (`client/`) workspaces, configured TypeScript, Tailwind CSS v4, and integrated Vitest for TDD execution.
-    *   `[x]` **Phase 1: Hub Server Core** — Express + ws server, SQLite schema (persons + items), HELLO protocol with secret validation, NODE_LIST broadcast, HEARTBEAT/ACK mechanism, graceful shutdown. 33 Vitest tests, strict TypeScript clean.
-    *   `[x]` **Phase 2: Department Node Frontend & Local DB** — Multi-agent pipeline with spec-gatherers (frontend/client-server/hub) → 5 parallel workers → code-reviewer. See detailed breakdown below.
-    *   `[x]` **Phase 2 Code Review** — Performed architectural review, identified data duplication bugs in form retries, fire-and-forget sync vulnerabilities, and React hook dependency issues.
-    *   `[x]` **Phase 2 Bug Fixes & Refactoring** — Resolved form retry duplication, refactored usePolling dependencies, consolidated API status/pending polling to App.tsx to eliminate duplicate network queries, updated and verified all 69 unit tests.
-    *   `[x]` **Phase 3: Global Ledger** — Real-time item table on node + SYNC_DUMP on connect + filter/search.
+    *   `[x]` Phase 3: Global Ledger — real-time item table with filter/search on node.
+    *   `[x]` Integrate SYNC_DUMP handshake (hub seeds new node with full state).
+    *   `[x]` Test ITEM_BROADCAST propagation between nodes.
+    *   `[x]` Fixed database `SQLITE_CONSTRAINT` foreign key error on client nodes when receiving flat-fields inside `SYNC_DUMP` payload (ERR-007).
+    *   `[x]` Prevented overwriting valid database person details with `[REDACTED]` values during subsequent synchronization events.
+    *   `[x]` Verified synchronization, claim flows, and edge cases via unit tests and local `curl` runs.
+    *   `[x]` Bugfix: `markItemSynced` missing import in routes.ts causing 500 on claim (ERR-008).
+    *   `[x]` Bugfix: Bidirectional heartbeat ACK failure causing constant disconnects (ERR-009).
+    *   `[x]` Full Phase 3 curl verification: 133 tests covering health, person CRUD, item CRUD, Global Ledger listing, status update/claim flow, cross-dept PII redaction, offline sync queue flush, and error/edge cases.
 *   **Pending Tasks**:
     *   `[ ]` Phase 4: Claims Processing — Build claims processing flow and sync claimed status.
 
@@ -143,3 +137,28 @@ This file tracks the historical context, architectural decisions, completed mile
 *   **Decision**: Implemented dynamic PII redaction inside the Hub's `ConnectionManager.broadcastToOthers`. The Hub checks if the recipient node's department name matches the item's `department_origin`. If they do not match, the Hub automatically redacts the PII details of `surrendered_by` and `claimed_by` before sending the payload.
 *   **Fixes**: Merged existing database record fields in the Hub's `STATUS_UPDATE` handler to avoid overwriting item details (like `item_name`) with NULL when status updates are processed.
 *   **Tests**: Added 2 new integration tests to `integration.test.ts` verifying that `ITEM_BROADCAST` and `STATUS_UPDATE` properly redact PII for unrelated department nodes. All 52 Hub server tests and 24 Node server tests compile and pass.
+
+### Session: 2026-06-09 (Fixing SYNC_DUMP Foreign Key SQLite Constraints & Redaction Guards)
+*   **Problem**: During node connection, receiving a `SYNC_DUMP` from the hub produced a foreign key constraint violation (`SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`). This was due to items referencing surrenderer/claimant persons whose records were not yet created, or because the payload contained flat fields instead of nested person objects.
+*   **Decision**: 
+    1. Reconstruct nested `Person` objects from incoming item flat-fields (e.g. `surrenderer_full_name`, `claimant_mobile`) and persist them into the node's local database before inserting/updating the item.
+    2. Guard `saveOrUpdatePerson` against overwriting valid local PII details (mobile, id_type, id_number) with `[REDACTED]` values received from sync broadcasts.
+*   **Fixes**: 
+    - Updated `handleIncomingItem` and `handleIncomingStatusUpdate` in node's `database.ts` to reconstruct person models and guard PII updates.
+    - Updated `routes.ts` in node's `client-server` to automatically set `synced = 1` locally upon successful real-time `STATUS_UPDATE` broadcasts.
+*   **Tests**: Created Vitest test cases in `database.test.ts` for flat-field reconstruction and `[REDACTED]` guard validation. Verified all 26 node tests and 103 frontend tests successfully pass. Tried multiple offline-online sync scenarios using local curl queries and confirmed convergence.
+
+### Session: 2026-06-09 (Phase 3 Full Verification — curl Testing, Bug Discovery, and Heartbeat Fix)
+*   **Scope**: Comprehensive manual `curl`-based verification of every Phase 3 feature and edge case across a live 3-server deployment (Hub on :5000, Security node on :3001, Engineering node on :3002).
+*   **Tests Executed**: 133 manual curl tests across 7 categories:
+    1.  **Hub Health & Node Status** (3 tests): Hub `/health` returns uptime + nodeCount; node `/api/status` returns connection state + peer count.
+    2.  **Person CRUD** (7 tests): Create with full PII, create minimal (mobile only), get by ID, 404 for unknown person, validation of missing `full_name`/`mobile`/empty body.
+    3.  **Item Creation & Global Ledger** (10 tests): Create `found` with surrenderer, `found` without surrenderer, `lost` item, GET all items (Global Ledger), GET item detail with `surrenderedByPerson` inline, 404 for unknown item, validation of missing `item_name`/`status`, invalid status, empty body.
+    4.  **Status Update / Claim Flow** (5 tests): Claim with claimant, claim without `claimed_by` (rejected), invalid status value (rejected), non-existent item (404), double-claim (idempotent).
+    5.  **PII Redaction for Cross-Dept Sync** (8 tests): Alice Smith's full PII visible on Security (origin dept), `[REDACTED]` on Engineering; Bob Jones's PII redacted on Engineering after STATUS_UPDATE; SYNC_DUMP correctly redacts cross-dept PII; ITEM_BROADCAST real-time item creation propagates to Engineering with `[REDACTED]` PII; `[REDACTED]` guard in `saveOrUpdatePerson` prevents overwriting real PII on subsequent sync events; hub DB retains raw PII.
+    6.  **Sync Queue & Offline Behavior** (7 tests): Online items get `synced=1`, pending queue is empty; kill hub, Security node status to `disconnected`/`connecting`; create items offline → `synced=0`, pending queue has 2 items; restart hub, nodes reconnect with bidirectional ACK; pending queue drains to 0; offline items arrive in hub DB; items propagate to Engineering.
+    7.  **Error Handling & Edge Cases** (15 tests): SQL injection in item_name, SQL injection in person full_name, XSS `<script>` in description, non-JSON body, wrong Content-Type, 10KB item name, Unicode/emoji in fields, proto pollution attempt, `GET /nonexistent` returns 404, POST array instead of object, null/empty string fields, bool instead of string fields, DB integrity check (all tables intact after injection attempts).
+*   **Bugs Found & Fixed**:
+    - **ERR-008**: `markItemSynced` called without being imported in `client/server/src/routes.ts`. Claim endpoint returned 500 despite succeeding in DB. Fixed by adding `markItemSynced` to the import list.
+    - **ERR-009**: Bidirectional heartbeat ACK missing. Hub sent `HEARTBEAT` pings but nodes had no handler → nodes didn't ACK → hub timed out after 2 misses (~25s). Nodes sent `HEARTBEAT` pings but hub had no handler → hub silently ignored → nodes timed out. Result: both nodes disconnected/reconnected every ~25s, STATUS_UPDATE broadcasts never reached Engineering. Fixed by: (1) adding `HEARTBEAT: () => { this.send('ACK', {}); }` in `ws-client.ts` event handlers, (2) adding a `HEARTBEAT → ACK` response handler in `server/src/index.ts` message router.
+*   **Verification**: All 78 automated tests pass (52 hub + 26 client). Connections stable at 218s+ uptime with no reconnects. PII redaction confirmed correct: Security retains real PII, Engineering sees `[REDACTED]` for all cross-dept data. Offline→online sync flush works end-to-end.

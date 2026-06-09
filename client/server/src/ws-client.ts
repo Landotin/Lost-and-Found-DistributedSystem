@@ -148,6 +148,9 @@ export class WsClientManager extends EventEmitter {
       ACK: () => {
         this.resetHeartbeatTimeout();
       },
+      HEARTBEAT: () => {
+        this.send('ACK', {});
+      },
       SYNC_DUMP: (payload) => {
         this.emit('sync_dump', payload);
       },

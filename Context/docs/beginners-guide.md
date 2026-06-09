@@ -262,3 +262,68 @@ curl http://localhost:3001/api/items/SOME_ITEM_UUID
 }
 ```
 
+---
+
+### Scenario F: Reconnection Sync Dump (FK Constraint Verification) and PII Guarding via UI
+This scenario verifies that:
+1. Reconnecting client nodes process `SYNC_DUMP` items containing flat fields without producing SQLite foreign key violations.
+2. Subsequent synchronizations do not overwrite valid local PII details with `[REDACTED]` values from other nodes.
+
+#### Step 1: Open Node 1 UI (Security)
+1. Ensure the Hub, Node 1 (Security) server, and the React UI are running.
+2. Open your browser to [http://localhost:5173](http://localhost:5173).
+3. Go to the **Log Item** tab and log a found item:
+   * **Item Name**: `Leather Backpack`
+   * **Category**: `Personal Effects`
+   * **Status**: `Found`
+   * **Description**: `Brown leather backpack containing books`
+   * **Surrenderer Full Name**: `Alice Miller`
+   * **Surrenderer Mobile**: `+639155554321`
+   * **Surrenderer ID Type**: `Passport`
+   * **Surrenderer ID Number**: `P9876543A`
+4. Click **Submit**. Verify the item is listed in the **Global Ledger** tab.
+
+#### Step 2: Simulate Reconnection & Sync Dump Processing
+1. In the terminal running the Node 1 Server (Terminal 2), stop the server (`Ctrl + C`).
+2. Start the server again:
+   ```bash
+   PORT=3001 DEPT_NAME=Security DB_PATH=data/security.db DEPT_SECRET=DEPT_SECRET npm run dev
+   ```
+3. Look at the console output of Node 1 Server.
+4. *Verify that*:
+   * The server connects to the Hub and receives the `SYNC_DUMP` message:
+     `[Server] Received SYNC_DUMP with X item(s)`
+   * There are **NO** `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` errors in the logs.
+   * Re-open/refresh the UI at [http://localhost:5173](http://localhost:5173) and verify that the `Leather Backpack` is correctly listed in the **Global Ledger** with the full surrenderer name and details visible.
+
+#### Step 3: Verify PII Protection against Redacted Overwrites
+1. Start Node 2 (Library) on Port 3002:
+   ```bash
+   PORT=3002 DEPT_NAME=Library DB_PATH=data/library.db DEPT_SECRET=DEPT_SECRET npm run dev
+   ```
+2. The Library node will connect to the Hub, download the `Leather Backpack` via sync, but because it is an unrelated department, the Hub sends it with redacted PII details (`[REDACTED]`).
+3. Now, simulate a status change or update coming from Node 2 (Library). Claim the backpack using a curl command:
+   * First, register claimant "Bob Jones" on Node 2:
+     ```bash
+     curl -X POST http://localhost:3002/api/persons \
+       -H "Content-Type: application/json" \
+       -d '{"full_name": "Bob Jones", "mobile": "+639169998888", "id_type": "Driver License", "id_number": "DL-12345"}'
+     ```
+     *(Copy the generated claimant UUID)*
+   * Mark the `Leather Backpack` as claimed on Node 2:
+     ```bash
+     curl -X PATCH http://localhost:3002/api/items/<backpack-item-uuid>/status \
+       -H "Content-Type: application/json" \
+       -d '{"status": "claimed", "claimed_by": "<claimant-uuid>"}'
+     ```
+4. This status update is broadcasted to the Central Hub, which then broadcasts it back to Node 1 (Security).
+5. Now, check the local database on Node 1 (Security):
+   ```bash
+   sqlite3 "/home/jed/Personal Projects/Lost and Found/client/server/data/security.db" "SELECT * FROM persons WHERE full_name = 'Alice Miller';"
+   ```
+6. *Verify that*:
+   * Alice Miller's mobile number is still `+639155554321` and has **NOT** been overwritten with `[REDACTED]`.
+   * Her ID Type and ID Number remain `Passport` and `P9876543A` respectively.
+   * Refresh [http://localhost:5173](http://localhost:5173) and verify that Alice Miller's PII remains fully visible on Node 1 (Security).
+
+

@@ -73,4 +73,35 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-08
 
+### ERR-007: SQLite Foreign Key Violation on Client Node during Sync Dump
+*   **Component**: Database / Client Server
+*   **Symptom**: Node server prints `[Server] Error handling sync_dump item: [Error: SQLITE_CONSTRAINT: FOREIGN KEY constraint failed]` when receiving synchronization payloads (like `SYNC_DUMP` or `ITEM_BROADCAST`) from the hub.
+*   **Root Cause**: The hub sends item structures with either nested person details or flat fields for associated surrenderer/claimant persons. The client node tries to save the item before ensuring the referenced persons exist in the local `persons` table, or it tries to save with a foreign key referencing a non-existent person ID. Additionally, synchronizations could overwrite valid local PII with `[REDACTED]` values from other nodes.
+*   **Resolution**: 
+    1. Reconstruct full nested person records from incoming item flat-fields and save/update the `persons` table first before saving the item.
+    2. Guard `saveOrUpdatePerson` to verify that existing valid PII details (like `mobile`, `id_type`, `id_number`) are never overwritten by `[REDACTED]` values.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
+### ERR-008: `markItemSynced` Missing Import in Routes
+*   **Component**: Client Server
+*   **Symptom**: `PATCH /api/items/:id/status` returns HTTP 500 `{"error": "Failed to update item status"}` when marking an item as claimed while connected. The item is actually updated in the database (status, claimed_by, claimed_at all set) but the API response fails.
+*   **Root Cause**: `routes.ts` calls `await markItemSynced(req.params.id)` on line 209 after a successful status update broadcast, but `markItemSynced` was never imported from `./database.js`. The import list included `createPerson, createItem, getAllItems, getItemById, getPersonById, getPendingSyncItems, updateItemStatus, Person, Item, ItemStatus` — `markItemSynced` was omitted.
+*   **Resolution**: Added `markItemSynced` to the import list in `client/server/src/routes.ts:3`.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
+### ERR-009: Bidirectional Heartbeat ACK Failure — Constant Reconnections
+*   **Component**: Server + Client Server (WebSocket)
+*   **Symptom**: Both Security and Engineering department nodes connect successfully, complete the HELLO handshake, receive SYNC_DUMP, and function normally for ~25 seconds — then disconnect and reconnect in a loop (`Heartbeat ACK timeout — reconnecting`). Log shows repeated `[WS-Client] Unhandled event: HEARTBEAT` on the node side, and the hub's HeartbeatManager fires `node_timeout` events for both nodes.
+*   **Root Cause**: Two missing pieces on opposite sides of the wire:
+    1. **Hub → Node**: The Hub's HeartbeatManager sends `HEARTBEAT` pings to nodes, but the WsClientManager on the node side had no handler for the `HEARTBEAT` event — it just logged "Unhandled event: HEARTBEAT" and never sent back an `ACK`. The Hub counted this as a missed ACK and disconnected the node after 2 consecutive misses (~25s).
+    2. **Node → Hub**: The WsClientManager on the node side sends its own `HEARTBEAT` pings, but the Hub's message router in `server/src/index.ts` had no handler for the `HEARTBEAT` event — it fell through to being silently ignored. The node counted this as a missed ACK and triggered a disconnect/reconnect cycle.
+*   **Resolution**:
+    1. Added `HEARTBEAT: () => { this.send('ACK', {}); }` to the `eventHandlers` map in `client/server/src/ws-client.ts:151` so nodes ACK hub heartbeats.
+    2. Added a `HEARTBEAT` event handler in `server/src/index.ts:78-84` that looks up the sending node's socket and sends back `{ event: 'ACK', payload: { timestamp: Date.now() } }`.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
+
 

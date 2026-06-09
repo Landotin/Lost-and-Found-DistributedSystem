@@ -132,6 +132,29 @@ describe('saveOrUpdatePerson', () => {
     const saved2 = await getPersonById('person-5');
     expect(saved2!.created_at).toBe(saved1!.created_at);
   });
+
+  it('should NOT overwrite a valid id_type and id_number with "[REDACTED]"', async () => {
+    await createPerson({
+      id: 'person-redact-id',
+      full_name: 'Carol ID Test',
+      mobile: '555-0300',
+      id_type: 'Driver License',
+      id_number: 'DL-12345',
+    });
+
+    const incoming: Person = {
+      id: 'person-redact-id',
+      full_name: 'Carol ID Test',
+      mobile: '555-0300',
+      id_type: '[REDACTED]',
+      id_number: '[REDACTED]',
+    };
+    await saveOrUpdatePerson(incoming);
+
+    const saved = await getPersonById('person-redact-id');
+    expect(saved!.id_type).toBe('Driver License');
+    expect(saved!.id_number).toBe('DL-12345');
+  });
 });
 
 describe('handleIncomingItem', () => {
@@ -292,6 +315,50 @@ describe('handleIncomingItem', () => {
     expect(saved).toBeDefined();
     expect(saved!.item_name).toBe('No Person Item');
     expect(saved!.synced).toBe(1);
+  });
+
+  it('should handle flat fields from SYNC_DUMP and reconstruct person record', async () => {
+    const flatItem = {
+      id: 'item-flat-sync-1',
+      item_name: 'Flat Sync Wallet',
+      description: 'Black leather wallet',
+      category: 'Accessories',
+      department_origin: 'Engineering',
+      status: 'found' as const,
+      surrendered_by: 'surr-flat-1',
+      surrenderer_full_name: 'Flat Surrenderer',
+      surrenderer_mobile: '[REDACTED]',
+      surrenderer_id_type: '[REDACTED]',
+      surrenderer_id_number: '[REDACTED]',
+      claimed_by: 'claimant-flat-1',
+      claimant_full_name: 'Flat Claimant',
+      claimant_mobile: '[REDACTED]',
+      claimant_id_type: '[REDACTED]',
+      claimant_id_number: '[REDACTED]',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    await handleIncomingItem(flatItem as any);
+
+    // Surrenderer person should be saved
+    const savedSurr = await getPersonById('surr-flat-1');
+    expect(savedSurr).toBeDefined();
+    expect(savedSurr!.full_name).toBe('Flat Surrenderer');
+    expect(savedSurr!.mobile).toBe('[REDACTED]');
+
+    // Claimant person should be saved
+    const savedClaim = await getPersonById('claimant-flat-1');
+    expect(savedClaim).toBeDefined();
+    expect(savedClaim!.full_name).toBe('Flat Claimant');
+    expect(savedClaim!.mobile).toBe('[REDACTED]');
+
+    // Item should be saved with correct foreign keys
+    const savedItem = await getItemById('item-flat-sync-1');
+    expect(savedItem).toBeDefined();
+    expect(savedItem!.item_name).toBe('Flat Sync Wallet');
+    expect(savedItem!.surrendered_by).toBe('surr-flat-1');
+    expect(savedItem!.claimed_by).toBe('claimant-flat-1');
   });
 });
 

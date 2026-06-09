@@ -8,6 +8,7 @@ import {
   getPersonById,
   getPendingSyncItems,
   updateItemStatus,
+  markItemSynced,
   Person,
   Item,
   ItemStatus,
@@ -206,6 +207,7 @@ export function createApiRouter(
           claimed_by: claimedByPerson, // full person object or null
           updated_at: new Date().toISOString(),
         });
+        await markItemSynced(req.params.id);
       }
 
       const updated = await getItemById(req.params.id);
