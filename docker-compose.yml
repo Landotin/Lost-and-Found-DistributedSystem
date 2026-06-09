@@ -28,3 +28,33 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  dept_ccs:
+    build:
+      context: ./client
+    ports:
+      - "5001:3000"
+    environment:
+      - DEPT_NAME=College of Computer Studies
+      - SERVER_WS_URL=ws://hub:5000
+      - DEPT_SECRET=${ADMIN_SECRET:-changeme}
+      - PORT=3000
+      - NODE_ENV=production
+    depends_on:
+      hub:
+        condition: service_started
+
+  dept_coe:
+    build:
+      context: ./client
+    ports:
+      - "5002:3000"
+    environment:
+      - DEPT_NAME=College of Engineering
+      - SERVER_WS_URL=ws://hub:5000
+      - DEPT_SECRET=${ADMIN_SECRET:-changeme}
+      - PORT=3000
+      - NODE_ENV=production
+    depends_on:
+      hub:
+        condition: service_started
