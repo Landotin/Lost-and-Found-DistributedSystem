@@ -50,7 +50,7 @@ export async function startServer(): Promise<http.Server> {
 
   // 5. In production (NODE_ENV=production), serve the Vite build
   if (process.env.NODE_ENV === 'production') {
-    const staticDir = path.resolve(__dirname, '..', 'dist');
+    const staticDir = path.resolve(__dirname, '..', '..', 'dist');
     app.use(express.static(staticDir));
     // SPA fallback — serve index.html for any non-API route
     app.get('*', (_req, res) => {

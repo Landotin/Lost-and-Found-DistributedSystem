@@ -6,6 +6,8 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
+## 0. Active Session Status
+
 *   **Task Compile**: Phase 6 complete. Multi-stage Dockerfile created for department nodes, docker-compose.yml updated with `dept_ccs` and `dept_coe` services. Full Playwright E2E integration tests implemented and passing, verifying real-time sync, API-based sync, and offline network partition eventual consistency. All 84 global integration tests pass.
 *   **Current Task**: None.
 *   **Completed Tasks**:
@@ -129,10 +131,11 @@ This file tracks the historical context, architectural decisions, completed mile
 ---
 
 ## 3. Current Focus & Next Steps
-1.  Phase 6 Docker complete — department nodes containerized, docker-compose unified.
+## 3. Current Focus & Next Steps
+1.  Phase 6 complete — department nodes containerized, docker-compose unified. Playwright-based E2E tests prove real-time sync and offline/eventual consistency in the distributed Hub-and-Spoke architecture.
 2.  Created `test_all_phases.sh` — automated curl integration test suite (84 tests, Phases 1-5 + edge cases). All 84 passing.
 3.  Created `/verify` slash command skill in `.claude/skills/verify.md` to run the test suite on demand.
-4.  Next steps: Live Docker verification on a Docker-capable machine, or end-to-end Docker-based integration tests.
+4.  Next steps: Run `docker compose up --build -d` on a Docker-capable machine to verify deployment, and clean up temporary worktrees.
 
 ---
 
@@ -350,7 +353,7 @@ This file tracks the historical context, architectural decisions, completed mile
     - `hub-dashboard/src/pages/Logs.tsx` — Full Event Log with terminal, pause/resume/clear, connection indicator
     - `hub-dashboard/src/pages/Analytics.tsx` — Full Analytics with Recharts bar chart and KPI cards
     - `hub-dashboard/vitest.config.ts` — Vitest configuration for component testing
-    - `hub-dashboard/src/test/setup.ts` — Test setup with jest-dom matchers
+    - `hub-dashboard/src/test/setup.ts` — Test setup with jsdom matchers
     - `hub-dashboard/src/test/smoke.test.tsx` — Vitest smoke test
     - `hub-dashboard/src/pages/__tests__/Monitor.test.tsx` — 6 Monitor tests
     - `hub-dashboard/src/pages/__tests__/Ledger.test.tsx` — 9 Ledger tests
@@ -398,20 +401,29 @@ This file tracks the historical context, architectural decisions, completed mile
     - `MEMORY.md` — this entry
 *   **Verification Status**: Docker is not installed on this development machine. All configuration files have been statically verified for path correctness and secret alignment. Live verification (`docker compose up --build -d`) must be performed on a Docker-capable machine.
 
-### Session: 2026-06-09 (Phase 6 E2E Testing & Playwright Integration)
-*   **Scope**: Completed the Phase 6 E2E Playwright integration tests and verified all Phase 1-5 features end-to-end under real network conditions, offline scenarios, and sync recoveries.
-*   **Playwright E2E Setup**:
-    - Created `e2e/` folder with complete tests, helpers, and configurations.
-    - `playwright.config.ts` configured for Chromium browser and isolated single-worker test runner.
-    - `helpers/servers.ts` starts and stops the Hub and Node servers programmatically, injecting environment configurations dynamically and clearing test database files before each test suite execution.
+### Session: 2026-06-09 (Phase 6 — End-to-End Testing with Playwright & Integration Verification)
+*   **Scope**: Implemented automated E2E integration tests using Playwright, proving the distributed Hub-and-Spoke architecture works end-to-end through the browser under various network partition scenarios.
+*   **Playwright E2E Setup**: Created `e2e/` directory with `package.json`, `playwright.config.ts` (chromium, 120s timeout), and a server lifecycle helper (`helpers/servers.ts`) that programmatically starts the hub and two department nodes with isolated clean data directories.
 *   **Tests Implemented**:
-    - *Real-time Sync*: Logs an item on Node A (Security) and verifies its instantaneous appearance on Node B (Engineering) without manual page refreshes.
-    - *API Sync*: Simulates server-to-hub items creation and verifies correct unredacted and redacted data distribution across nodes.
-    - *Offline & Eventual Consistency*: Kills the Central Hub, logs a found item on Node A (Security), verifies that the UI indicates offline status and updates the Pending Sync count to 1. Restarts the Hub, verifies automatic WS reconnection, sync queue flushing, and eventual item delivery to Node B (Engineering).
+    *   *Real-Time Sync* (`tests/realtime-sync.spec.ts`): Logs an item on Node A (Security) and verifies its instantaneous appearance on Node B (Engineering) without page refresh, checking real-time client-to-client UI replication via WebSocket triggers.
+    *   *API Sync*: Verifies that the hub broadcasts items correctly to other nodes via API triggers.
+    *   *Offline & Eventual Consistency* (`tests/offline-consistency.spec.ts`): Kills the hub with SIGTERM, submits an item on Node A (verifying offline warning badge and Pending Sync queue increment), restarts the hub, and confirms automatic reconnect, sync queue flushing, and eventual propagation to Node B.
 *   **Bugs Resolved**:
-    - Fixed static file serving path in client server production mode (`../dist` to `../../dist`).
-    - Fixed TypeScript build/test types in `client/tsconfig.app.json` by adding `vitest/globals` to prevent compilation failures.
-    - Fixed strict mode locator collision in Playwright tests where `Log Item` target resolved to both tab headers and submit buttons.
+    *   Fixed production static file path in `client/server/src/index.ts` (`__dirname/../dist` → `__dirname/../../dist`) to serve the built Vite application correctly.
+    *   Fixed strict selector collisions in Playwright by targeting specific button elements (`button[type="submit"]`).
+    *   Added missing `vi` import in `GlobalLedger.test.tsx` and resolved TypeScript types in `client/tsconfig.app.json` by adding `vitest/globals`.
 *   **Test Results**: All 3 Playwright E2E tests and all 84 global curl integration tests pass successfully.
-
+*   **Files created**:
+    - `e2e/package.json` — Playwright dependencies
+    - `e2e/playwright.config.ts` — Chromium config, 120s timeout, 1 worker
+    - `e2e/tsconfig.json` — TypeScript config for E2E tests
+    - `e2e/helpers/servers.ts` — Server lifecycle (start/stop/restart hub + nodes)
+    - `e2e/tests/realtime-sync.spec.ts` — Real-time sync scenarios
+    - `e2e/tests/offline-consistency.spec.ts` — Offline + eventual consistency scenario
+*   **Files modified**:
+    - `client/src/components/ProcessClaim.tsx` — Removed redundant formStatus comparison
+    - `client/src/components/__tests__/GlobalLedger.test.tsx` — Added `vi` import
+    - `client/tsconfig.app.json` — Added `vitest/globals` to types
+    - `client/server/src/index.ts` — Fixed production static path resolution
+    - `MEMORY.md` — this entry
 
