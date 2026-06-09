@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import http from 'node:http';
 
 // ---------------------------------------------------------------------------
@@ -348,6 +348,124 @@ describe('Client Server — Entry Point', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toContain('Cannot transition');
+  });
+
+  // -----------------------------------------------------------------------
+  // Offline Sync — markItemSynced guard
+  // -----------------------------------------------------------------------
+
+  describe('sync guard', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('marks synced when item was previously synced (synced=1)', async () => {
+      const { getItemById, markItemSynced } = await import('./database.js');
+      const { WsClientManager } = await import('./ws-client.js');
+      const { createApiRouter } = await import('./routes.js');
+      const express = await import('express');
+      const http = await import('node:http');
+
+      const localApp = express.default();
+      localApp.use(express.default.json());
+      const localWsManager = new (WsClientManager as any)('TestDept', 'test-secret', 'ws://localhost:9999');
+      (localWsManager as any).connectionStatus = 'connected';
+      localApp.use('/api', createApiRouter(localWsManager as any, 'TestDept'));
+
+      const localServer = http.default.createServer(localApp);
+      await new Promise<void>(resolve => localServer.listen(0, resolve));
+      const addr = localServer.address() as { port: number };
+      const localPort = addr.port;
+
+      const syncedItem = {
+        id: 'sync-guard-item-1', item_name: 'Wallet', status: 'lost' as const,
+        department_origin: 'TestDept', synced: 1,
+        updated_at: '2026-06-09T00:00:00.000Z', created_at: '2026-06-09T00:00:00.000Z',
+      };
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(syncedItem);
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ...syncedItem, status: 'found' });
+
+      await fetch(`http://localhost:${localPort}/api/items/sync-guard-item-1/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'found' }),
+      });
+
+      expect(markItemSynced).toHaveBeenCalledWith('sync-guard-item-1');
+      localServer.close();
+    });
+
+    it('does NOT mark synced when item was offline-created (synced=0)', async () => {
+      const { getItemById, markItemSynced } = await import('./database.js');
+      const { WsClientManager } = await import('./ws-client.js');
+      const { createApiRouter } = await import('./routes.js');
+      const express = await import('express');
+      const http = await import('node:http');
+
+      const localApp = express.default();
+      localApp.use(express.default.json());
+      const localWsManager = new (WsClientManager as any)('TestDept', 'test-secret', 'ws://localhost:9999');
+      (localWsManager as any).connectionStatus = 'connected';
+      localApp.use('/api', createApiRouter(localWsManager as any, 'TestDept'));
+
+      const localServer = http.default.createServer(localApp);
+      await new Promise<void>(resolve => localServer.listen(0, resolve));
+      const addr = localServer.address() as { port: number };
+      const localPort = addr.port;
+
+      const unsyncedItem = {
+        id: 'sync-guard-item-2', item_name: 'Phone', status: 'lost' as const,
+        department_origin: 'TestDept', synced: 0,
+        updated_at: '2026-06-09T00:00:00.000Z', created_at: '2026-06-09T00:00:00.000Z',
+      };
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(unsyncedItem);
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ...unsyncedItem, status: 'found' });
+
+      await fetch(`http://localhost:${localPort}/api/items/sync-guard-item-2/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'found' }),
+      });
+
+      expect(markItemSynced).not.toHaveBeenCalled();
+      localServer.close();
+    });
+
+    it('does not broadcast or mark synced when disconnected', async () => {
+      const { getItemById, updateItemStatus, markItemSynced } = await import('./database.js');
+      const { WsClientManager } = await import('./ws-client.js');
+      const { createApiRouter } = await import('./routes.js');
+      const express = await import('express');
+      const http = await import('node:http');
+
+      const localApp = express.default();
+      localApp.use(express.default.json());
+      const localWsManager = new (WsClientManager as any)('TestDept', 'test-secret', 'ws://localhost:9999');
+      // connectionStatus defaults to 'disconnected' in the mock
+      localApp.use('/api', createApiRouter(localWsManager as any, 'TestDept'));
+
+      const localServer = http.default.createServer(localApp);
+      await new Promise<void>(resolve => localServer.listen(0, resolve));
+      const addr = localServer.address() as { port: number };
+      const localPort = addr.port;
+
+      const offlineItem = {
+        id: 'sync-guard-item-3', item_name: 'Tablet', status: 'found' as const,
+        department_origin: 'TestDept', synced: 1,
+        updated_at: '2026-06-09T00:00:00.000Z', created_at: '2026-06-09T00:00:00.000Z',
+      };
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(offlineItem);
+      (getItemById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ...offlineItem, status: 'claimed' });
+
+      await fetch(`http://localhost:${localPort}/api/items/sync-guard-item-3/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'claimed', claimed_by: 'claimant-id' }),
+      });
+
+      expect(updateItemStatus).toHaveBeenCalledWith('sync-guard-item-3', 'claimed', 'claimant-id', undefined);
+      expect((localWsManager as any).send).not.toHaveBeenCalled();
+      expect(markItemSynced).not.toHaveBeenCalled();
+      localServer.close();
+    });
   });
 
   // -----------------------------------------------------------------------

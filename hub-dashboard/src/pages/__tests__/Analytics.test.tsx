@@ -16,6 +16,8 @@ function createAnalytics(overrides: Partial<AnalyticsResult> = {}): AnalyticsRes
     totalFound: 6,
     totalClaimed: 3,
     totalLost: 2,
+    avgTimeToClaimHours: 24.5,
+    offlineEventCount: 3,
     ...overrides,
   }
 }
@@ -95,6 +97,44 @@ describe('Analytics Page', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/no department data/i)).toBeInTheDocument()
+    })
+  })
+
+  it('renders avg time to claim value', async () => {
+    mockFetchAnalytics.mockResolvedValue(createAnalytics({ avgTimeToClaimHours: 48 }))
+    render(<Analytics />)
+
+    await waitFor(() => {
+      expect(screen.getByText('48.0 hrs')).toBeInTheDocument()
+    })
+  })
+
+  it('renders "—" when avgTimeToClaimHours is null', async () => {
+    mockFetchAnalytics.mockResolvedValue(createAnalytics({ avgTimeToClaimHours: null }))
+    render(<Analytics />)
+
+    await waitFor(() => {
+      expect(screen.getByText('—')).toBeInTheDocument()
+    })
+  })
+
+  it('renders offline event count', async () => {
+    mockFetchAnalytics.mockResolvedValue(createAnalytics({ offlineEventCount: 5 }))
+    render(<Analytics />)
+
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+  })
+
+  it('renders "0" for zero offline events', async () => {
+    mockFetchAnalytics.mockResolvedValue(createAnalytics({ offlineEventCount: 0, totalItems: 1, totalFound: 0, totalClaimed: 0, totalLost: 0 }))
+    render(<Analytics />)
+
+    await waitFor(() => {
+      // Offline Events KPI shows "0"
+      const zeros = screen.getAllByText('0')
+      expect(zeros.length).toBeGreaterThanOrEqual(1)
     })
   })
 })

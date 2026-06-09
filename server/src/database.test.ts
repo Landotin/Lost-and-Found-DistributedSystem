@@ -480,4 +480,82 @@ describe('getAnalytics', () => {
     try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
     try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
   });
+
+  it('avgTimeToClaimHours returns correct hours for claimed items', async () => {
+    const { initDatabase: initDb, getAnalytics: getAnalyticsFn } = await import('./database.js');
+    const isolatedPath = path.join(TEST_DIR, 'test-avg-time.db');
+    const isolatedDb = await initDb(isolatedPath);
+    // Insert a claimed item with timestamps ~48 hours apart
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status, created_at, claimed_at)
+       VALUES ('avg-1', 'Phone', 'CCS', 'claimed', '2026-06-07T00:00:00.000Z', '2026-06-09T00:00:00.000Z')`
+    );
+    const result = await getAnalyticsFn();
+    // 48 hours difference => avgTimeToClaimHours should be 48
+    expect(result.avgTimeToClaimHours).not.toBeNull();
+    expect(result.avgTimeToClaimHours).toBeCloseTo(48, 0);
+    await isolatedDb.close();
+    try { fs.unlinkSync(isolatedPath); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
+  });
+
+  it('avgTimeToClaimHours is null when no claimed items exist', async () => {
+    const { initDatabase: initDb, getAnalytics: getAnalyticsFn } = await import('./database.js');
+    const isolatedPath = path.join(TEST_DIR, 'test-avg-null.db');
+    const isolatedDb = await initDb(isolatedPath);
+    // Only insert lost items
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status)
+       VALUES ('no-claim-1', 'Wallet', 'CCS', 'lost')`
+    );
+    const result = await getAnalyticsFn();
+    expect(result.avgTimeToClaimHours).toBeNull();
+    await isolatedDb.close();
+    try { fs.unlinkSync(isolatedPath); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
+  });
+
+  it('offlineEventCount counts items with offline_created=1', async () => {
+    const { initDatabase: initDb, getAnalytics: getAnalyticsFn } = await import('./database.js');
+    const isolatedPath = path.join(TEST_DIR, 'test-offline.db');
+    const isolatedDb = await initDb(isolatedPath);
+    // Insert mix of offline and online-created items
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status, offline_created)
+       VALUES ('off-1', 'Phone', 'CCS', 'lost', 1)`
+    );
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status, offline_created)
+       VALUES ('off-2', 'Wallet', 'CCS', 'found', 1)`
+    );
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status, offline_created)
+       VALUES ('online-1', 'Keys', 'COE', 'claimed', 0)`
+    );
+    const result = await getAnalyticsFn();
+    expect(result.offlineEventCount).toBe(2);
+    await isolatedDb.close();
+    try { fs.unlinkSync(isolatedPath); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
+  });
+
+  it('offlineEventCount returns 0 when no offline items exist', async () => {
+    const { initDatabase: initDb, getAnalytics: getAnalyticsFn } = await import('./database.js');
+    const isolatedPath = path.join(TEST_DIR, 'test-offline-zero.db');
+    const isolatedDb = await initDb(isolatedPath);
+    // Only insert online-created items
+    await isolatedDb.run(
+      `INSERT INTO items (id, item_name, department_origin, status, offline_created)
+       VALUES ('online-only-1', 'Phone', 'CCS', 'lost', 0)`
+    );
+    const result = await getAnalyticsFn();
+    expect(result.offlineEventCount).toBe(0);
+    await isolatedDb.close();
+    try { fs.unlinkSync(isolatedPath); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-wal'); } catch { /* ok */ }
+    try { fs.unlinkSync(isolatedPath + '-shm'); } catch { /* ok */ }
+  });
 });

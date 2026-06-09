@@ -33,6 +33,7 @@ export interface Item {
   updated_at?: string;
   created_at?: string;
   image_data?: string | null;
+  offline_created?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,9 @@ export async function initDatabase(
   if (!existingColumns.includes('image_data')) {
     await database.exec('ALTER TABLE items ADD COLUMN image_data TEXT;');
   }
+  if (!existingColumns.includes('offline_created')) {
+    await database.exec('ALTER TABLE items ADD COLUMN offline_created INTEGER DEFAULT 0;');
+  }
 
   db = database;
   return database;
@@ -159,6 +163,7 @@ export async function saveItem(item: Item): Promise<void> {
            claimed_at = ?,
            image_data = ?,
            synced = ?,
+           offline_created = ?,
            updated_at = ?,
            created_at = ?
          WHERE id = ?`,
@@ -173,6 +178,7 @@ export async function saveItem(item: Item): Promise<void> {
         item.claimed_at ?? null,
         item.image_data ?? null,
         item.synced ?? 0,
+        item.offline_created ?? 0,
         item.updated_at ?? new Date().toISOString(),
         item.created_at ?? null,
         item.id,
@@ -182,8 +188,8 @@ export async function saveItem(item: Item): Promise<void> {
   } else {
     // Insert new item
     await db.run(
-      `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by, claimed_by, reported_by, claimed_at, image_data, synced, updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by, claimed_by, reported_by, claimed_at, image_data, synced, offline_created, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       item.id,
       item.item_name,
       item.description ?? null,
@@ -196,6 +202,7 @@ export async function saveItem(item: Item): Promise<void> {
       item.claimed_at ?? null,
       item.image_data ?? null,
       item.synced ?? 0,
+      item.offline_created ?? 0,
       item.updated_at ?? new Date().toISOString(),
       item.created_at ?? new Date().toISOString(),
     );
@@ -338,6 +345,8 @@ export interface AnalyticsResult {
   totalFound: number;
   totalClaimed: number;
   totalLost: number;
+  avgTimeToClaimHours: number | null;
+  offlineEventCount: number;
 }
 
 export async function getAnalytics(): Promise<AnalyticsResult> {
@@ -363,5 +372,19 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
   const denominator = totalFound + totalClaimed;
   const claimRate = denominator > 0 ? totalClaimed / denominator : 0;
 
-  return { itemsByDepartment, claimRate, totalItems, totalFound, totalClaimed, totalLost };
+  // Average time-to-claim in hours for claimed items
+  const avgTimeRow = await db.get<{ avgHours: number | null }>(
+    `SELECT AVG((julianday(claimed_at) - julianday(created_at)) * 24) as avgHours
+     FROM items
+     WHERE status = 'claimed' AND claimed_at IS NOT NULL AND created_at IS NOT NULL`
+  );
+  const avgTimeToClaimHours = avgTimeRow?.avgHours ?? null;
+
+  // Count items that were created while the originating node was offline
+  const offlineRow = await db.get<{ count: number }>(
+    'SELECT COUNT(*) as count FROM items WHERE offline_created = 1'
+  );
+  const offlineEventCount = offlineRow?.count ?? 0;
+
+  return { itemsByDepartment, claimRate, totalItems, totalFound, totalClaimed, totalLost, avgTimeToClaimHours, offlineEventCount };
 }

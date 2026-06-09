@@ -294,6 +294,9 @@ export function createApiRouter(
         }
       }
 
+      // Capture pre-update sync state BEFORE updateItemStatus resets it
+      const wasSyncedBefore = item.synced === 1;
+
       await updateItemStatus(req.params.id, status as ItemStatus, claimed_by, surrendered_by);
 
       // Broadcast status update if online
@@ -316,7 +319,13 @@ export function createApiRouter(
           surrendered_by: surrenderedByPerson, // full person object or null
           updated_at: new Date().toISOString(),
         });
-        await markItemSynced(req.params.id);
+
+        // Only mark synced if the item was already on the hub before this update.
+        // Offline-created items (wasSyncedBefore=false) stay at synced=0 so they
+        // get flushed via SYNC_QUEUE_FLUSH on reconnect, which sends the full item record.
+        if (wasSyncedBefore) {
+          await markItemSynced(req.params.id);
+        }
       }
 
       const updated = await getItemById(req.params.id);

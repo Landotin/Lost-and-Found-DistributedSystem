@@ -254,6 +254,7 @@ export async function startServer(): Promise<http.Server> {
             reported_by: existingItem.reported_by,
             claimed_at: payload.claimed_at ?? new Date().toISOString(),
             image_data: existingItem.image_data,
+            offline_created: existingItem.offline_created ?? 0,
             updated_at: payload.updated_at ?? new Date().toISOString(),
             created_at: existingItem.created_at,
           });
@@ -265,6 +266,36 @@ export async function startServer(): Promise<http.Server> {
               'STATUS_UPDATE',
               payload,
               existingItem.department_origin
+            );
+          }
+        } else {
+          // Item doesn't exist on hub yet — create minimal record from STATUS_UPDATE
+          // so other nodes at least receive the broadcast. The full item record will
+          // arrive via SYNC_QUEUE_FLUSH when the originating node reconnects.
+          await saveItem({
+            id: payload.id,
+            item_name: payload.item_name ?? '(pending sync)',
+            description: undefined,
+            category: undefined,
+            department_origin: payload.department_origin ?? 'unknown',
+            status: payload.status,
+            surrendered_by: payload.surrendered_by?.id ?? undefined,
+            claimed_by: payload.claimed_by?.id ?? undefined,
+            reported_by: undefined,
+            claimed_at: payload.claimed_at ?? undefined,
+            image_data: undefined,
+            offline_created: 1,
+            updated_at: payload.updated_at ?? new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          });
+
+          // Broadcast to other nodes (no deptOrigin — broadcastToOthers falls back to payload.department_origin)
+          if (manager) {
+            manager.broadcastToOthers(
+              socketId,
+              'STATUS_UPDATE',
+              payload,
+              undefined
             );
           }
         }
@@ -301,6 +332,7 @@ export async function startServer(): Promise<http.Server> {
             reported_by: item.reported_by?.id ?? null,
             claimed_at: item.claimed_at ?? null,
             image_data: item.image_data ?? null,
+            offline_created: 1,
             updated_at: item.updated_at ?? null,
             created_at: item.created_at ?? null,
           });

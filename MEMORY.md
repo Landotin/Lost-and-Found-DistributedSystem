@@ -6,20 +6,16 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Contact info for lost-item reporters (`reported_by`) + image upload support (`image_data`) implemented across the full stack. Lost item registrants now provide a contact number so the department can reach them when the item is found. Users can upload item photos in LogItemForm with client-side resize; thumbnails render in all table/card views, full images in detail modals. 378/378 tests passing across all suites.
+*   **Task Compile**: Offline sync reliability fix and Hub Dashboard analytics enhancements implemented. Items created offline no longer get permanently lost when a status update is applied while briefly online. Hub analytics now tracks avg time-to-claim (hours) and offline event count. 104/104 integration tests, 43/43 client/server, 85/85 hub server, 59/59 dashboard, 205/205 frontend — ALL PASSING across all suites.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` `reported_by` — new DB column (node + hub), shared types, API routes, sync handlers, PII redaction
-    *   `[x]` Contact info section in LogItemForm when status="lost" (name + mobile required)
-    *   `[x]` Reporters appear in department list views (LostItems table + modal), GlobalLedger, and all hub dashboard pages
-    *   `[x]` `image_data` — new DB column (node + hub), client-side resize utility, file input with preview
-    *   `[x]` Image thumbnails in all table views, full image display in all detail modals
-    *   `[x]` Cross-department PII redaction extended to reporter person data
-    *   `[x]` 4 new integration tests + updated frontend tests for new form fields
-    *   `[x]` All 378 tests passing (40 node server + 81 hub server + 202 frontend + 55 dashboard)
-*   **Pending Tasks**:
-    *   `[ ]` Offline sync reliability — items created during offline should maintain `synced=0` through status updates
-    *   `[ ]` Hub Dashboard — avg time-to-claim analytics, offline event count
+    *   `[x]` Offline sync reliability — `markItemSynced` guarded behind `wasSyncedBefore` check in status update handler
+    *   `[x]` Hub-side STATUS_UPDATE resilience — creates minimal item record when hub receives update for unknown item
+    *   `[x]` `avgTimeToClaimHours` analytics — SQL query using `julianday(claimed_at - created_at) * 24`
+    *   `[x]` `offline_created` column migration — tracks items arriving via SYNC_QUEUE_FLUSH
+    *   `[x]` `offlineEventCount` analytics — counts items with `offline_created=1`
+    *   `[x]` Hub Dashboard — Avg Time to Claim + Offline Events KPI cards (6-column grid)
+    *   `[x]` 11 new tests (3 sync guard + 4 analytics DB + 4 dashboard UI)
 
 ### Session: 2026-06-09 (Phase 2 — Smart Matching Implementation)
 *   **Scope**: Implemented smart matching suggestions on LogItemForm to detect existing opposite-direction records before creating duplicate entries. When a user types an item name, the system debounce-searches for matching items and shows a non-blocking suggestion banner.
@@ -561,3 +557,24 @@ This file tracks the historical context, architectural decisions, completed mile
 *   **Files created**: `client/src/utils/image.ts`
 *   **Files modified**: `client/src/types.ts`, `client/server/src/database.ts`, `server/src/database.ts`, `client/server/src/routes.ts`, `server/src/index.ts`, `server/src/connection-manager.ts`, `client/src/components/LogItemForm.tsx`, `client/src/components/LostItems.tsx`, `client/src/components/FoundItems.tsx`, `client/src/components/ClaimedItems.tsx`, `client/src/components/GlobalLedger.tsx`, `client/src/components/__tests__/LogItemForm.test.tsx`, `hub-dashboard/src/hooks/useAdminApi.ts`, `hub-dashboard/src/hooks/useItemFilter.ts`, `hub-dashboard/src/pages/AllItems.tsx`, `hub-dashboard/src/pages/LostItems.tsx`, `hub-dashboard/src/pages/FoundItems.tsx`, `hub-dashboard/src/pages/ClaimedItems.tsx`, `test_all_phases.sh`, `MEMORY.md`
 
+### Session: 2026-06-09 (Offline Sync Reliability + Hub Dashboard Analytics)
+*   **Scope**: Resolved the last 2 pending tasks — offline sync reliability fix for items created while offline, and new Hub Dashboard analytics KPIs (avg time-to-claim, offline event count).
+*   **Problem 1 — Offline sync data loss**: Items created while offline (`synced=0`) that later received a status update while briefly online got permanently lost on the hub. Root cause: `markItemSynced()` was called unconditionally after a `STATUS_UPDATE` broadcast, even when the hub had never received the full item record. The hub's STATUS_UPDATE handler silently skipped unknown items.
+*   **Fix 1 — Guard markItemSynced**: Captured `wasSyncedBefore` (`item.synced === 1`) before `updateItemStatus()` in the PATCH handler. Only called `markItemSynced` after broadcast if the item was already on the hub. Offline-created items stay at `synced=0` and get flushed via `SYNC_QUEUE_FLUSH` on reconnect — which sends the full item record with the status update applied.
+*   **Fix 1b — Hub resilience**: When the hub receives `STATUS_UPDATE` for an unknown item, it now creates a minimal item record marked with `offline_created=1`, so the broadcast reaches other nodes. The full record arrives via `SYNC_QUEUE_FLUSH`.
+*   **Problem 2 — Missing analytics**: The Hub Dashboard analytics page only showed basic counts (total, lost, found, claimed, claim rate). No visibility into how long claims take or how many items were created offline.
+*   **Fix 2 — Avg time-to-claim**: Added SQL query `AVG((julianday(claimed_at) - julianday(created_at)) * 24)` for claimed items with both timestamps. New `avgTimeToClaimHours: number | null` field in `AnalyticsResult` shown as "X.X hrs" or "—" when null.
+*   **Fix 2b — Offline event count**: Added `offline_created INTEGER DEFAULT 0` column migration to hub's items table. Set to `1` in the `SYNC_QUEUE_FLUSH` handler. New `offlineEventCount: number` field in `AnalyticsResult`. 6-column responsive KPI grid.
+*   **Files modified**:
+    - `client/server/src/routes.ts` — Guarded `markItemSynced` with `wasSyncedBefore` check
+    - `client/server/src/index.test.ts` — 3 new sync guard tests (synced, unsynced, disconnected)
+    - `server/src/database.ts` — Added `offline_created` column migration, `offline_created` to Item type + saveItem queries, `avgTimeToClaimHours` + `offlineEventCount` queries in getAnalytics, updated AnalyticsResult type
+    - `server/src/database.test.ts` — 4 new analytics tests (avg time, null case, offline count, zero case)
+    - `server/src/index.ts` — Set `offline_created:1` in SYNC_QUEUE_FLUSH, added resilience for STATUS_UPDATE on unknown items
+    - `server/src/index.test.ts` — Updated analytics mock + assertions for new fields
+    - `hub-dashboard/src/hooks/useAdminApi.ts` — Added `avgTimeToClaimHours` + `offlineEventCount` to AnalyticsResult
+    - `hub-dashboard/src/pages/Analytics.tsx` — 2 new KPI cards, expanded grid from 4 to 6 columns
+    - `hub-dashboard/src/pages/__tests__/Analytics.test.tsx` — 4 new KPI card tests
+    - `test_all_phases.sh` — Added integration test assertions for `avgTimeToClaimHours` and `offlineEventCount`
+*   **Test Results**: 496/496 ALL TESTS PASSING (205 frontend + 85 hub server + 43 client/server + 59 hub dashboard + 104 integration).
+*   **Remaining**: No pending tasks. The project backlog is clear.

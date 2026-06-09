@@ -46,6 +46,8 @@ export interface AnalyticsResult {
   totalFound: number
   totalClaimed: number
   totalLost: number
+  avgTimeToClaimHours: number | null
+  offlineEventCount: number
 }
 
 /** Hub health info. */

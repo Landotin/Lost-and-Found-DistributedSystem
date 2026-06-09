@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchAnalytics, type AnalyticsResult } from '../hooks/useAdminApi'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { BarChart3, Loader2, AlertCircle, RefreshCw, SearchX } from 'lucide-react'
+import { BarChart3, Loader2, AlertCircle, RefreshCw, SearchX, Clock, WifiOff } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,7 +90,7 @@ function Analytics() {
       ) : analytics ? (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-gray-400">Total Items</h2>
@@ -129,6 +129,26 @@ function Analytics() {
               </div>
               <p className="text-4xl font-bold text-white">{analytics.totalFound}</p>
               <p className="text-xs text-gray-500 mt-1">{analytics.totalClaimed} claimed</p>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-gray-400">Avg Time to Claim</h2>
+                <Clock className="w-5 h-5 text-purple-400" />
+              </div>
+              <p className="text-4xl font-bold text-white">
+                {analytics.avgTimeToClaimHours !== null ? `${analytics.avgTimeToClaimHours.toFixed(1)} hrs` : '—'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">from creation to claim</p>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-gray-400">Offline Events</h2>
+                <WifiOff className="w-5 h-5 text-orange-400" />
+              </div>
+              <p className="text-4xl font-bold text-white">{analytics.offlineEventCount}</p>
+              <p className="text-xs text-gray-500 mt-1">created while disconnected</p>
             </div>
           </div>
 

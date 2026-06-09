@@ -745,6 +745,20 @@ else
   fail "Analytics missing claimRate"
 fi
 
+# Verify new analytics fields exist
+expect_contain "Analytics contains avgTimeToClaimHours" "avgTimeToClaimHours" \
+  -H "x-admin-secret: $ADMIN_SECRET" "$HUB_URL/api/admin/analytics"
+expect_contain "Analytics contains offlineEventCount" "offlineEventCount" \
+  -H "x-admin-secret: $ADMIN_SECRET" "$HUB_URL/api/admin/analytics"
+
+# Verify offline event count is a number
+OFFLINE_COUNT=$(echo "$ANALYTICS" | grep -o '"offlineEventCount":[0-9]*' | cut -d: -f2)
+if [ -n "$OFFLINE_COUNT" ] && [ "$OFFLINE_COUNT" -ge 0 ] 2>/dev/null; then
+  pass "Analytics offlineEventCount = $OFFLINE_COUNT"
+else
+  fail "Analytics missing offlineEventCount"
+fi
+
 header "5.5 Admin Force Sync"
 # Get first node ID
 NODE_ID=$(echo "$NODE_LIST" | grep -o '"socketId":"[^"]*"' | head -1 | cut -d'"' -f4)
