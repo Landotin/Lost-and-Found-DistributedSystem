@@ -7,6 +7,7 @@ interface GlobalLedgerProps {
   loading: boolean;
   error: string | null;
   deptName: string;
+  onProcessClaim?: (itemId: string) => void;
 }
 
 type ItemStatus = 'lost' | 'found' | 'claimed';
@@ -49,9 +50,10 @@ interface DetailModalProps {
   item: Item;
   deptName: string;
   onClose: () => void;
+  onProcessClaim?: (itemId: string) => void;
 }
 
-function DetailModal({ item, deptName, onClose }: DetailModalProps) {
+function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalProps) {
   const isOwnDepartment = item.department_origin === deptName;
 
   const renderPersonSection = (
@@ -153,13 +155,29 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
           {/* Claimed by details */}
           {item.status === 'claimed' &&
             renderPersonSection('Claimed By', item.claimedByPerson)}
+
+          {/* Process Claim button (only for found items) */}
+          {item.status === 'found' && onProcessClaim && (
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  onProcessClaim(item.id);
+                  onClose();
+                }}
+                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+              >
+                Process Claim
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export default function GlobalLedger({ items, loading, error, deptName }: GlobalLedgerProps) {
+export default function GlobalLedger({ items, loading, error, deptName, onProcessClaim }: GlobalLedgerProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -325,6 +343,7 @@ export default function GlobalLedger({ items, loading, error, deptName }: Global
           item={selectedItem}
           deptName={deptName}
           onClose={() => setSelectedItem(null)}
+          onProcessClaim={onProcessClaim}
         />
       )}
     </div>

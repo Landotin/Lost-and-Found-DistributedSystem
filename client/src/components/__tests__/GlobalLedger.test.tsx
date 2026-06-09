@@ -374,4 +374,88 @@ describe('GlobalLedger', () => {
       expect(screen.queryByText(/Item Details/i)).not.toBeInTheDocument();
     });
   });
+
+  describe('process claim button', () => {
+    it('shows Process Claim button for found items when onProcessClaim is provided', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="COE"
+          onProcessClaim={() => {}}
+        />
+      );
+
+      // Open the Wallet item (status = found)
+      fireEvent.click(screen.getByText('Wallet'));
+
+      expect(screen.getByRole('button', { name: /process claim/i })).toBeInTheDocument();
+    });
+
+    it('does not show Process Claim button when onProcessClaim is not provided', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="COE"
+        />
+      );
+
+      fireEvent.click(screen.getByText('Wallet'));
+
+      expect(screen.queryByRole('button', { name: /process claim/i })).not.toBeInTheDocument();
+    });
+
+    it('does not show Process Claim button for lost items', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="Test Dept"
+          onProcessClaim={() => {}}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Laptop'));
+
+      expect(screen.queryByRole('button', { name: /process claim/i })).not.toBeInTheDocument();
+    });
+
+    it('does not show Process Claim button for claimed items', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="CCS"
+          onProcessClaim={() => {}}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Phone'));
+
+      expect(screen.queryByRole('button', { name: /process claim/i })).not.toBeInTheDocument();
+    });
+
+    it('calls onProcessClaim with the item id when clicked', () => {
+      const onProcessClaim = vi.fn();
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="COE"
+          onProcessClaim={onProcessClaim}
+        />
+      );
+
+      fireEvent.click(screen.getByText('Wallet'));
+      fireEvent.click(screen.getByRole('button', { name: /process claim/i }));
+
+      expect(onProcessClaim).toHaveBeenCalledWith('2');
+    });
+  });
 });

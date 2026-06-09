@@ -3,12 +3,14 @@ import ConnectionStatus from './components/ConnectionStatus';
 import LogItemForm from './components/LogItemForm';
 import PendingSync from './components/PendingSync';
 import GlobalLedger from './components/GlobalLedger';
+import ProcessClaim from './components/ProcessClaim';
 import { usePolling } from './hooks/usePolling';
 import { fetchStatus, fetchPendingSync, fetchItems } from './hooks/useApi';
 import type { StatusResponse, PendingSyncResponse, Item } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'ledger' | 'log' | 'pending'>('ledger');
+  const [activeTab, setActiveTab] = useState<'ledger' | 'log' | 'pending' | 'claim'>('ledger');
+  const [processClaimItemId, setProcessClaimItemId] = useState<string | null>(null);
 
   // Lifted polling state to prevent duplicate HTTP requests
   const { data: statusData, loading: statusLoading, error: statusError } = usePolling<StatusResponse>(fetchStatus, 5000);
@@ -17,7 +19,7 @@ export default function App() {
 
   const deptName = statusData?.deptName || import.meta.env.VITE_DEPT_NAME || 'Department Node';
 
-  const getTabClassName = (tab: 'ledger' | 'log' | 'pending') =>
+  const getTabClassName = (tab: 'ledger' | 'log' | 'pending' | 'claim') =>
     `px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
       activeTab === tab
         ? 'border-b-2 border-blue-500 text-blue-400'
@@ -68,6 +70,14 @@ export default function App() {
         >
           Pending Sync
         </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'claim'}
+          onClick={() => { setActiveTab('claim'); setProcessClaimItemId(null); }}
+          className={getTabClassName('claim')}
+        >
+          Process Claim
+        </button>
       </nav>
 
       {/* Tab content */}
@@ -78,9 +88,21 @@ export default function App() {
             loading={itemsLoading}
             error={itemsError}
             deptName={deptName}
+            onProcessClaim={(itemId) => {
+              setProcessClaimItemId(itemId);
+              setActiveTab('claim');
+            }}
           />
         ) : activeTab === 'log' ? (
           <LogItemForm />
+        ) : activeTab === 'claim' ? (
+          <ProcessClaim
+            items={items}
+            preselectedItemId={processClaimItemId}
+            onClaimProcessed={() => {
+              setProcessClaimItemId(null);
+            }}
+          />
         ) : (
           <PendingSync
             pendingData={pendingData}

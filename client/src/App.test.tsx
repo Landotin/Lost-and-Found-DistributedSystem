@@ -1,4 +1,5 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import App from './App';
 
@@ -52,16 +53,29 @@ describe('App Component', () => {
     expect(screen.getByRole('heading', { name: /Lost & Found Tracker/i })).toBeInTheDocument();
   });
 
-  it('renders tab navigation with three tabs', () => {
+  it('renders tab navigation with four tabs', () => {
     render(<App />);
     expect(screen.getByRole('tab', { name: /global ledger/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /log item/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /pending sync/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /process claim/i })).toBeInTheDocument();
   });
 
   it('defaults to Global Ledger tab (aria-selected="true")', () => {
     render(<App />);
     const ledgerTab = screen.getByRole('tab', { name: /global ledger/i });
     expect(ledgerTab).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('switches to Process Claim tab when clicked', async () => {
+    render(<App />);
+
+    const claimTab = screen.getByRole('tab', { name: /process claim/i });
+    await userEvent.click(claimTab);
+
+    // Since items mock returns empty array, ProcessClaim shows empty state
+    await waitFor(() => {
+      expect(screen.getByText(/no found items available/i)).toBeInTheDocument();
+    });
   });
 });
