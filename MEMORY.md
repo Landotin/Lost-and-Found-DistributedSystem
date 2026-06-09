@@ -447,6 +447,7 @@ This file tracks the historical context, architectural decisions, completed mile
     - Logged `ERR-015` in `Context/ERROR.md` outlining the `Command 'docker' not found` root cause and resolution.
 *   **Files created**:
     - `start_local.sh` — Local runner script
+    - `README.md` — Comprehensive project setup, E2E test documentation, and horizontal scaling guide
 *   **Files modified**:
     - `server/src/index.ts` — Added route mapping for `/api/health`
     - `Context/ERROR.md` — Added `ERR-015` entry
