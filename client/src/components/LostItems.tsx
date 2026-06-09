@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
 import type { Item } from '../types';
+import { createPerson, updateItemStatus } from '../hooks/useApi';
+import { formatMobileToE164 } from '../utils/validation';
 
 interface LostItemsProps {
   items: Item[] | null;
@@ -54,6 +56,57 @@ interface DetailModalProps {
 function DetailModal({ item, deptName, onClose }: DetailModalProps) {
   const isOwnDepartment = item.department_origin === deptName;
 
+  // Mark as Found state
+  const [showMarkFound, setShowMarkFound] = useState(false);
+  const [markFoundStatus, setMarkFoundStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [surrendererName, setSurrendererName] = useState('');
+  const [surrendererMobile, setSurrendererMobile] = useState('');
+  const [surrendererIdType, setSurrendererIdType] = useState('');
+  const [surrendererIdNumber, setSurrendererIdNumber] = useState('');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [markFoundError, setMarkFoundError] = useState<string | null>(null);
+
+  function resetMarkFoundForm() {
+    setShowMarkFound(false);
+    setMarkFoundStatus('idle');
+    setSurrendererName('');
+    setSurrendererMobile('');
+    setSurrendererIdType('');
+    setSurrendererIdNumber('');
+    setFormErrors({});
+    setMarkFoundError(null);
+  }
+
+  async function handleMarkFoundSubmit() {
+    const errors: Record<string, string> = {};
+    if (!surrendererName.trim()) errors.name = 'Full name is required';
+    if (!surrendererMobile.trim()) errors.mobile = 'Mobile is required';
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
+    setMarkFoundStatus('submitting');
+    try {
+      const mobile = formatMobileToE164(surrendererMobile.trim());
+      const person = await createPerson({
+        full_name: surrendererName.trim(),
+        mobile,
+        id_type: surrendererIdType || undefined,
+        id_number: surrendererIdNumber || undefined,
+      });
+      await updateItemStatus(item.id, 'found', undefined, person.id);
+      setMarkFoundStatus('success');
+      setTimeout(() => {
+        onClose();
+        resetMarkFoundForm();
+      }, 2000);
+    } catch (err: any) {
+      setMarkFoundStatus('error');
+      setMarkFoundError(err?.message || 'Failed to mark item as found');
+    }
+  }
+
   const renderPersonSection = (
     label: string,
     person: { full_name: string; mobile?: string; id_type?: string; id_number?: string } | undefined
@@ -91,7 +144,7 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-100">Lost Item Details</h2>
           <button
-            onClick={onClose}
+            onClick={() => { resetMarkFoundForm(); onClose(); }}
             aria-label="Close"
             className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors"
           >
@@ -142,6 +195,107 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
             <p className="text-gray-200">{formatDateTime(item.created_at)}</p>
           </div>
         </div>
+
+        {/* Mark as Found — only for lost items */}
+        {item.status === 'lost' && !showMarkFound && markFoundStatus !== 'success' && (
+          <button
+            onClick={() => setShowMarkFound(true)}
+            className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+          >
+            Mark as Found
+          </button>
+        )}
+
+        {/* Surrenderer form */}
+        {showMarkFound && markFoundStatus === 'idle' && (
+          <div className="mt-4 border-t border-gray-700 pt-4">
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">Who found this item?</h4>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Full Name *</label>
+                <input
+                  value={surrendererName}
+                  onChange={(e) => setSurrendererName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  placeholder="Finder's full name"
+                />
+                {formErrors.name && <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Mobile *</label>
+                <input
+                  value={surrendererMobile}
+                  onChange={(e) => setSurrendererMobile(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  placeholder="+639XXXXXXXXX or 09XXXXXXXXX"
+                />
+                {formErrors.mobile && <p className="text-xs text-red-400 mt-1">{formErrors.mobile}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">ID Type</label>
+                <select
+                  value={surrendererIdType}
+                  onChange={(e) => setSurrendererIdType(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">None</option>
+                  <option value="Student ID">Student ID</option>
+                  <option value="Employee ID">Employee ID</option>
+                  <option value="Visitor">Visitor</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">ID Number</label>
+                <input
+                  value={surrendererIdNumber}
+                  onChange={(e) => setSurrendererIdNumber(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={handleMarkFoundSubmit}
+                disabled={markFoundStatus === 'submitting'}
+                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
+              >
+                {markFoundStatus === 'submitting' ? 'Submitting...' : 'Submit'}
+              </button>
+              <button
+                onClick={() => { resetMarkFoundForm(); }}
+                className="rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-gray-200 hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Success state */}
+        {markFoundStatus === 'success' && (
+          <div className="mt-4 rounded-lg bg-green-900/40 border border-green-700 p-3 text-green-300 text-sm text-center">
+            ✓ Item marked as found!
+          </div>
+        )}
+
+        {/* Error state */}
+        {markFoundStatus === 'error' && (
+          <div className="mt-4 rounded-lg bg-red-900/40 border border-red-700 p-3">
+            <p className="text-red-300 text-sm mb-2">{markFoundError || 'Failed to mark item as found.'}</p>
+            <button
+              onClick={handleMarkFoundSubmit}
+              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

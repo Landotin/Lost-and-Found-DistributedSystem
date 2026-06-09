@@ -294,13 +294,35 @@ export async function markItemSynced(id: string): Promise<void> {
 export async function updateItemStatus(
   id: string,
   status: ItemStatus,
-  claimedBy?: string
+  claimedBy?: string,
+  surrenderedBy?: string
 ): Promise<void> {
   const claimedAt = status === 'claimed' ? new Date().toISOString() : null;
+  const setClauses: string[] = [];
+  const params: any[] = [];
+
+  setClauses.push('status = ?');
+  params.push(status);
+
+  setClauses.push('claimed_by = ?');
+  params.push(claimedBy ?? null);
+
+  setClauses.push('claimed_at = ?');
+  params.push(claimedAt);
+
+  if (surrenderedBy && status === 'found') {
+    setClauses.push('surrendered_by = ?');
+    params.push(surrenderedBy);
+  }
+
+  setClauses.push('synced = 0');
+  setClauses.push("updated_at = CURRENT_TIMESTAMP");
+
+  params.push(id);
+
   await db.run(
-    `UPDATE items SET status = ?, claimed_by = ?, claimed_at = ?,
-     synced = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [status, claimedBy ?? null, claimedAt, id]
+    `UPDATE items SET ${setClauses.join(', ')} WHERE id = ?`,
+    params
   );
 }
 
@@ -343,7 +365,7 @@ export async function handleIncomingItem(payload: {
     surrendererPerson = {
       id: payload.surrendered_by,
       full_name: (payload as any).surrenderer_full_name,
-      mobile: (payload as any).surrenderer_mobile ? normalizeMobile((payload as any).surrenderer_mobile) : undefined,
+      mobile: (payload as any).surrenderer_mobile ? normalizeMobile((payload as any).surrenderer_mobile) : '',
       id_type: (payload as any).surrenderer_id_type ?? undefined,
       id_number: (payload as any).surrenderer_id_number ?? undefined,
     };
@@ -361,7 +383,7 @@ export async function handleIncomingItem(payload: {
     claimantPerson = {
       id: payload.claimed_by,
       full_name: (payload as any).claimant_full_name,
-      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : undefined,
+      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : '',
       id_type: (payload as any).claimant_id_type ?? undefined,
       id_number: (payload as any).claimant_id_number ?? undefined,
     };
@@ -462,6 +484,7 @@ export async function handleIncomingStatusUpdate(payload: {
   id: string;
   status: string;
   claimed_by?: string | Person | null;
+  surrendered_by?: string | Person | null;
   updated_at?: string;
 }): Promise<void> {
   // 1. Save the claimant person if provided as a full Person object or flat details
@@ -472,7 +495,7 @@ export async function handleIncomingStatusUpdate(payload: {
     claimantPerson = {
       id: payload.claimed_by,
       full_name: (payload as any).claimant_full_name,
-      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : undefined,
+      mobile: (payload as any).claimant_mobile ? normalizeMobile((payload as any).claimant_mobile) : '',
       id_type: (payload as any).claimant_id_type ?? undefined,
       id_number: (payload as any).claimant_id_number ?? undefined,
     };
@@ -488,7 +511,31 @@ export async function handleIncomingStatusUpdate(payload: {
       ? (payload.claimed_by as Person).id
       : (payload.claimed_by as string | null) ?? null;
 
-  // 2. Check if the item exists (for LWW comparison)
+  // 2. Save the surrenderer person if provided as a full Person object
+  let surrendererPerson: Person | undefined;
+  if (payload.surrendered_by && typeof payload.surrendered_by === 'object') {
+    surrendererPerson = payload.surrendered_by as Person;
+  } else if (payload.surrendered_by && typeof payload.surrendered_by === 'string' && (payload as any).surrenderer_full_name) {
+    surrendererPerson = {
+      id: payload.surrendered_by,
+      full_name: (payload as any).surrenderer_full_name,
+      mobile: (payload as any).surrenderer_mobile ? normalizeMobile((payload as any).surrenderer_mobile) : '',
+      id_type: (payload as any).surrenderer_id_type ?? undefined,
+      id_number: (payload as any).surrenderer_id_number ?? undefined,
+    };
+  }
+
+  if (surrendererPerson) {
+    await saveOrUpdatePerson(surrendererPerson);
+  }
+
+  // Normalize surrendered_by to a string (person ID) for database storage
+  const surrenderedById: string | null =
+    payload.surrendered_by && typeof payload.surrendered_by === 'object'
+      ? (payload.surrendered_by as Person).id
+      : (payload.surrendered_by as string | null) ?? null;
+
+  // 3. Check if the item exists (for LWW comparison)
   const existing = await getItemById(payload.id);
   if (!existing) {
     // Item doesn't exist locally — status update has nothing to act on
@@ -508,25 +555,36 @@ export async function handleIncomingStatusUpdate(payload: {
     return;
   }
 
-  // 3. Apply the status update
+  // 4. Apply the status update
   const claimedAt = payload.status === 'claimed'
     ? (payload.updated_at ?? new Date().toISOString())
     : null;
 
+  const setClauses: string[] = [];
+  const params: any[] = [];
+
+  setClauses.push('status = ?');
+  params.push(payload.status);
+
+  setClauses.push('claimed_by = ?');
+  params.push(claimedById);
+
+  setClauses.push('claimed_at = ?');
+  params.push(claimedAt);
+
+  if (surrenderedById) {
+    setClauses.push('surrendered_by = ?');
+    params.push(surrenderedById);
+  }
+
+  setClauses.push('synced = 1');
+  setClauses.push('updated_at = ?');
+  params.push(payload.updated_at ?? new Date().toISOString());
+
+  params.push(payload.id);
+
   await db.run(
-    `UPDATE items
-        SET status      = ?,
-            claimed_by  = ?,
-            claimed_at  = ?,
-            synced      = 1,
-            updated_at  = ?
-      WHERE id = ?`,
-    [
-      payload.status,
-      claimedById,
-      claimedAt,
-      payload.updated_at ?? new Date().toISOString(),
-      payload.id,
-    ]
+    `UPDATE items SET ${setClauses.join(', ')} WHERE id = ?`,
+    params
   );
 }

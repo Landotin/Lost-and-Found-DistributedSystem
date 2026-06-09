@@ -163,7 +163,7 @@ describe('Client Server — Entry Point', () => {
       body: JSON.stringify({ status: 'found' }),
     });
     expect(res.status).toBe(200);
-    expect(updateItemStatus).toHaveBeenCalledWith('test-item-lost', 'found', undefined);
+    expect(updateItemStatus).toHaveBeenCalledWith('test-item-lost', 'found', undefined, undefined);
   });
 
   it('PATCH /items/:id/status — found -> claimed succeeds (200)', async () => {
@@ -191,7 +191,7 @@ describe('Client Server — Entry Point', () => {
       body: JSON.stringify({ status: 'claimed', claimed_by: 'claimant-id' }),
     });
     expect(res.status).toBe(200);
-    expect(updateItemStatus).toHaveBeenCalledWith('test-item-found', 'claimed', 'claimant-id');
+    expect(updateItemStatus).toHaveBeenCalledWith('test-item-found', 'claimed', 'claimant-id', undefined);
   });
 
   it('PATCH /items/:id/status — lost -> claimed fails with 400', async () => {

@@ -202,13 +202,18 @@ export async function startServer(): Promise<http.Server> {
       return;
     }
 
-    // Handle STATUS_UPDATE: save item status and claimant, broadcast to others
+    // Handle STATUS_UPDATE: save item status, claimant and surrenderer, broadcast to others
     if (message.event === 'STATUS_UPDATE') {
       const payload = message.payload as any;
       try {
         // Save claimant if provided
         if (payload.claimed_by?.id) {
           await savePerson(payload.claimed_by);
+        }
+
+        // Save surrenderer if provided
+        if (payload.surrendered_by?.id) {
+          await savePerson(payload.surrendered_by);
         }
 
         // Fetch existing item to preserve fields and get origin department
@@ -218,7 +223,7 @@ export async function startServer(): Promise<http.Server> {
         );
 
         if (existingItem) {
-          // Update the item's status and claimant details
+          // Update the item's status, claimant, and surrenderer details
           await saveItem({
             id: payload.id,
             item_name: existingItem.item_name,
@@ -226,7 +231,7 @@ export async function startServer(): Promise<http.Server> {
             category: existingItem.category,
             department_origin: existingItem.department_origin,
             status: payload.status,
-            surrendered_by: existingItem.surrendered_by,
+            surrendered_by: payload.surrendered_by?.id ?? existingItem.surrendered_by,
             claimed_by: payload.claimed_by?.id ?? null,
             claimed_at: payload.claimed_at ?? new Date().toISOString(),
             updated_at: payload.updated_at ?? new Date().toISOString(),

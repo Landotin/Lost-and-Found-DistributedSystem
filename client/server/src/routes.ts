@@ -197,7 +197,7 @@ export function createApiRouter(
 
   router.patch('/items/:id/status', async (req: Request, res: Response) => {
     try {
-      const { status, claimed_by } = req.body;
+      const { status, claimed_by, surrendered_by } = req.body;
 
       if (!status || !['lost', 'found', 'claimed'].includes(status)) {
         res.status(400).json({ error: 'status must be "lost", "found", or "claimed"' });
@@ -235,20 +235,35 @@ export function createApiRouter(
         }
       }
 
-      await updateItemStatus(req.params.id, status as ItemStatus, claimed_by);
+      // Validate surrendered_by person if provided (when transitioning to found)
+      if (surrendered_by) {
+        const surrendererPerson = await getPersonById(surrendered_by);
+        if (!surrendererPerson) {
+          res.status(400).json({ error: 'Surrenderer person not found' });
+          return;
+        }
+      }
+
+      await updateItemStatus(req.params.id, status as ItemStatus, claimed_by, surrendered_by);
 
       // Broadcast status update if online
       if (wsManager.connectionStatus === 'connected') {
-        // Fetch full claimant person details
+        // Fetch full person details for broadcast
         let claimedByPerson: Person | null = null;
         if (claimed_by) {
-          claimedByPerson = await getPersonById(claimed_by);
+          claimedByPerson = (await getPersonById(claimed_by)) ?? null;
+        }
+
+        let surrenderedByPerson: Person | null = null;
+        if (surrendered_by) {
+          surrenderedByPerson = (await getPersonById(surrendered_by)) ?? null;
         }
 
         wsManager.send('STATUS_UPDATE', {
           id: req.params.id,
           status,
           claimed_by: claimedByPerson, // full person object or null
+          surrendered_by: surrenderedByPerson, // full person object or null
           updated_at: new Date().toISOString(),
         });
         await markItemSynced(req.params.id);

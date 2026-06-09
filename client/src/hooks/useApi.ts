@@ -37,10 +37,14 @@ export function createItem(data: CreateItemPayload): Promise<Item> {
   });
 }
 
-export function updateItemStatus(id: string, status: ItemStatus, claimed_by?: string): Promise<Item> {
+export function updateItemStatus(id: string, status: ItemStatus, claimed_by?: string, surrendered_by?: string): Promise<Item> {
   return request<Item>(`/api/items/${id}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status, ...(claimed_by !== undefined ? { claimed_by } : {}) }),
+    body: JSON.stringify({
+      status,
+      ...(claimed_by !== undefined ? { claimed_by } : {}),
+      ...(surrendered_by !== undefined ? { surrendered_by } : {}),
+    }),
   });
 }
 

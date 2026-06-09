@@ -6,16 +6,19 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Migrated status filters from Global Ledger dropdown into individual navigation tabs (Lost Items, Found Items). Created new LostItems and FoundItems components with per-department filtering, search, detail modals, and PII redaction. Converted Global Ledger to card-style rows with status badges. Added 29 new tests; all 191 frontend tests passing.
+*   **Task Compile**: Implemented "Mark as Found" feature — lost items can now be transitioned to 'found' with surrenderer (finder) information attached to the same record, eliminating duplicate lost/found entries. Extended `updateItemStatus()` with `surrendered_by` parameter. Extended `PATCH /items/:id/status` and `STATUS_UPDATE` WebSocket broadcast to carry surrenderer person data on both client-server and hub-server. Added Mark as Found button + surrenderer form to LostItems DetailModal. All Phase 1 tests passing.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Created LostItems component with per-department lost-item view, search, and detail modal
-    *   `[x]` Created FoundItems component with per-department found-item view, Process Claim button, search, and detail modal
-    *   `[x]` Removed status filter dropdown from GlobalLedger; converted table to card-style rows
-    *   `[x]` Added Lost Items and Found Items navigation tabs; reordered tabs (status tabs grouped first)
-    *   `[x]` Added 29 tests (11 LostItems + 18 FoundItems); updated GlobalLedger and App tests
-    *   `[x]` All 191 frontend tests passing across 15 test files
-*   **Pending Tasks**: None.
+    *   `[x]` Extended `updateItemStatus()` in client server database.ts with optional `surrendered_by` param
+    *   `[x]` Extended `PATCH /items/:id/status` to accept `surrendered_by` for 'found' transitions
+    *   `[x]` Extended `STATUS_UPDATE` WebSocket broadcast with surrenderer person data on client server
+    *   `[x]]` Extended hub server STATUS_UPDATE handler to accept and save surrenderer person data
+    *   `[x]` Extended node `handleIncomingStatusUpdate` for surrenderer person LWW sync
+    *   `[x]` Added "Mark as Found" button + surrenderer form in LostItems DetailModal (with submission, success, error, retry states)
+    *   `[x]` All 306 tests passing (34 client-server + 191 frontend + 81 hub-server)
+*   **Pending Tasks**:
+    *   `[ ]` **Phase 2**: Smart matching suggestions on LogItemForm — when logging a found item, suggest matching lost items; when logging a lost item, suggest matching found items (prevents duplicates before creation)
+    *   `[ ]` **Phase 2**: Cross-tab routing for smart matching suggestions
 
 ---
 
@@ -500,3 +503,21 @@ This file tracks the historical context, architectural decisions, completed mile
     - `hub-dashboard/src/pages/__tests__/Monitor.test.tsx` — Added `fetchAnalytics` mock to all tests
 *   **Test Results**: 55/55 dashboard tests, 81/81 server tests, 90/90 integration tests — ALL PASSED. TypeScript clean, production build succeeds.
 *   **Sidebar**: Now 7 items — Monitor, All Items, Lost Items, Found Items, Claimed Items, Logs, Analytics
+
+### Session: 2026-06-09 (Phase 7 — Mark as Found, Lost→Found Resolution)
+*   **Scope**: Implemented the "Mark as Found" feature — the first phase of deduplicating lost and found item records. Users can now mark a lost item as found directly, attaching surrenderer (finder) information to the same record instead of creating a duplicate found entry.
+*   **Problem**: When someone found an item that was previously reported lost, the system forced users to log a completely new found item. This created duplicate data — a lost record and a found record for the same physical item.
+*   **Decision**: Leverage the existing `lost → found` state machine transition. Extend `PATCH /items/:id/status` to accept `surrendered_by` when transitioning to 'found'. Reuse the existing `STATUS_UPDATE` WebSocket event to sync surrenderer person data (same pattern as claimant data for claims). No schema changes needed — the `surrendered_by` column already exists.
+*   **Files modified**:
+    - `client/server/src/database.ts` — Extended `updateItemStatus()` with `surrendered_by` param; extended `handleIncomingStatusUpdate()` with surrenderer person data handling
+    - `client/server/src/routes.ts` — Added `surrendered_by` acceptance in PATCH handler; surrenderer person data in STATUS_UPDATE broadcast
+    - `server/src/index.ts` — Added surrenderer person saving in STATUS_UPDATE WS handler; set `surrendered_by` on hub item update
+    - `client/src/hooks/useApi.ts` — Extended `updateItemStatus()` with 4th `surrendered_by` parameter
+    - `client/src/components/LostItems.tsx` — Added "Mark as Found" button in DetailModal, surrenderer form (Name, Mobile, ID Type/Number), submission flow with success/error/retry states
+    - `client/server/src/index.test.ts` — Updated assertions for new 4-param function signature
+*   **Test Results**: 306/306 ALL TESTS PASSED (34 client-server + 191 frontend + 81 hub-server).
+*   **Known Limitations**:
+    - Smart matching (Phase 2) not yet implemented — if a user logs a found item when a matching lost report exists, the system does not yet suggest the match
+    - Reverse direction (logging a lost item when a matching found report exists) also lacks suggestions
+*   **Next Steps**: Implement Phase 2 — smart matching suggestions on LogItemForm to detect existing opposite-direction records before creating duplicates.
+

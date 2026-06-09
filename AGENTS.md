@@ -79,3 +79,40 @@ To ensure the agent adheres to the latest framework features and best practices:
     *   **ws**: Handle WebSocket close events, heartbeats (pings/pongs), and buffer serialization/deserialization safely.
     *   **SQLite**: Use async wrapper libraries (like `sqlite` / `sqlite3`) and always use parameterized queries to prevent SQL injection.
 
+---
+
+## 5. Item Lifecycle & Status Transitions
+
+Items follow a strict state machine: `lost → found → claimed`. The `claimed` state is terminal.
+
+### Extended "Mark as Found" Flow (Phase 7+)
+
+Lost items can now be **marked as found** with surrenderer (finder) information attached to the same record:
+
+- **`PATCH /items/:id/status`** accepts an optional `surrendered_by` (person ID) when the target status is `'found'`.
+- **`STATUS_UPDATE`** WebSocket event carries optional `surrenderer` person data (full `Person` object) alongside the existing `claimant` data.
+- The hub's STATUS_UPDATE handler (`server/src/index.ts`) saves the surrenderer person and updates `surrendered_by` on the item.
+- The node's `handleIncomingStatusUpdate()` (`client/server/src/database.ts`) saves the surrenderer person with the `[REDACTED]` guard and updates the item via LWW.
+- Frontend: LostItems DetailModal shows a "Mark as Found" button → surrenderer form → creates person + patches item.
+
+**STATUS_UPDATE payload format:**
+```typescript
+{
+  id: string;
+  status: string;
+  claimed_by?: Person | null;       // full person object (for 'claimed' transitions)
+  surrenderer?: Person | null;      // full person object (for 'found' transitions)
+  updated_at?: string;
+}
+```
+
+### Pending: Phase 2 — Smart Matching (LogItemForm)
+
+When logging an item, the system should check for existing opposite-direction records and suggest the correct action:
+
+- Logging a **found** item → search existing `lost` items for name match → suggest "This matches a lost report — mark it as found instead"
+- Logging a **lost** item → search existing `found` items for name match → suggest "This was already found — claim it instead"
+- Suggestions are non-blocking banners — user can dismiss and proceed normally
+- Cross-tab routing: "Mark as Found" switch to LostItems, "Claim Instead" switch to ProcessClaim
+
+
