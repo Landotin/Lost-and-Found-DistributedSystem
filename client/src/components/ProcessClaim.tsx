@@ -237,7 +237,7 @@ export default function ProcessClaim({ items, preselectedItemId, onClaimProcesse
       )}
 
       {/* Claimant form phase */}
-      {formStatus !== 'selecting' && formStatus !== 'success' && selectedItem && (
+      {formStatus !== 'selecting' && selectedItem && (
         <form onSubmit={handleSubmit} className="rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">

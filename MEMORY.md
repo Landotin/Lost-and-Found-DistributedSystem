@@ -6,19 +6,15 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 5 Backend and Frontend Scaffold complete. Implemented Admin REST APIs, Admin WebSocket support, and comprehensive tests in the hub. Created hub-dashboard/ Vite React TS project with sidebar navigation, Tailwind CSS v4, API/WS hooks, and Docker integration.
-*   **Current Task**: Phase 5: Hub Dashboard Views — Pending.
+*   **Task Compile**: Phase 6 E2E complete. Playwright-based E2E tests prove real-time sync and offline/eventual consistency in the distributed Hub-and-Spoke architecture.
+*   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Phase 4 complete — both backend and frontend. Code review identified 5 findings — all fixed.
-    *   `[x]` Phase 5 Backend: Added `adminAuth` Express middleware checking `x-admin-secret` header.
-    *   `[x]` Phase 5 Backend: Implemented `GET /api/admin/nodes`, `POST /api/admin/nodes/:id/disconnect`, `POST /api/admin/nodes/:id/sync`.
-    *   `[x]` Phase 5 Backend: Implemented `GET /api/admin/items` and `GET /api/admin/analytics`.
-    *   `[x]` Phase 5 Backend: Added admin WebSocket support (unredacted `broadcastToOthers`).
-    *   `[x]` Phase 5 Backend: 80 passing tests across 5 files.
-    *   `[x]` Phase 5 Frontend: Hub Dashboard scaffold — Vite project, Tailwind CSS v4, sidebar layout.
-    *   `[x]` Phase 5 Frontend: API/WS hooks — `useAdminApi`, `useAdminWs`.
-    *   `[x]` Phase 5 Frontend: Hub dashboard Dockerfile and `docker-compose.yml`.
-*   **Pending Tasks**: None.
+    *   `[x]` Phase 6 E2E: Set up Playwright in `e2e/` with configuration, isolated test data, and server lifecycle management.
+    *   `[x]` Phase 6 E2E: Real-Time Sync test — submits an item on Node A (Security) via the UI and verifies it appears on Node B (Engineering) without page refresh.
+    *   `[x]` Phase 6 E2E: Offline & Eventual Consistency test — kills the hub, submits an item offline (synced=0, appears in Pending Sync), restarts hub, verifies auto-flush and item delivery to Node B.
+    *   `[x]` Phase 6 E2E: API-level sync test — verifies hub broadcasts items correctly via API calls.
+    *   `[x]` TypeScript build fixes for client — fixed redundant comparison in ProcessClaim, added `vi` import in GlobalLedger test, added `vitest/globals` types.
+    *   `[x]` Bugfix: Client server production static file path corrected from `__dirname/../dist` to `__dirname/../../dist`.
 
 ---
 
@@ -113,9 +109,9 @@ This file tracks the historical context, architectural decisions, completed mile
 ---
 
 ## 3. Current Focus & Next Steps
-1.  Phase 5 complete — 80 hub tests passing.
-2.  End-to-end verification of admin APIs and admin WebSocket.
-3.  Next phase (Phase 6) TBD — potentially frontend admin dashboard or client/node admin integrations.
+1.  Phase 6 complete — all 3 E2E tests pass (real-time sync, API sync, offline→eventual consistency).
+2.  Phase 5 complete — all 4 Hub Dashboard views implemented and tested (32 dashboard + 80 hub tests).
+3.  All previous phases verified and stable.
 
 ---
 
@@ -254,4 +250,42 @@ This file tracks the historical context, architectural decisions, completed mile
     - `hub-dashboard/src/hooks/useAdminWs.ts` — WebSocket hook with admin auth
     - `hub-dashboard/Dockerfile` — Multi-stage build for production
     - `docker-compose.yml` — New compose file with hub + dashboard services
+
+### Session: 2026-06-09 (Phase 6 — End-to-End Testing with Playwright)
+*   **Scope**: Implemented automated E2E integration tests using Playwright, proving the distributed Hub-and-Spoke architecture works end-to-end through the browser.
+*   **Playwright Setup**: Created `e2e/` directory with `package.json`, `playwright.config.ts` (chromium, 120s timeout), and a server lifecycle helper (`helpers/servers.ts`) that programmatically starts the hub and two department nodes with isolated data directories.
+*   **Real-Time Sync Test** (`tests/realtime-sync.spec.ts`):
+    *   Opens Node B (Engineering) page — verifies empty Global Ledger.
+    *   Switches to Node A (Security), navigates to Log Item tab, fills the form (item name, category, found status, surrenderer details) and submits.
+    *   Verifies success indicator and that the item appears on Node B's Global Ledger *without any page refresh*, using the app's built-in 5-second polling loop.
+    *   Second test creates an item via API and verifies hub broadcast delivers it to Node B.
+*   **Offline & Eventual Consistency Test** (`tests/offline-consistency.spec.ts`):
+    *   Kills the hub with SIGTERM, waits for Node A to detect disconnection (WebSocket onclose fires immediately).
+    *   Submits an item while offline — API returns 201 with `synced=0`, frontend shows success.
+    *   Navigates to Pending Sync tab — item appears with count badge.
+    *   Restarts the hub, Node A auto-reconnects (HELLO → authenticated → flushSyncQueue).
+    *   Verifies pending count drops to 0 and item arrives on Node B's Global Ledger.
+    *   Key backend event: `[NodeA] [WS-Client] Flushed 1 item(s) to hub` — confirms the sync queue mechanism works.
+*   **Build Fixes**:
+    *   Fixed redundant TypeScript comparison in `ProcessClaim.tsx` (formStatus check after early return).
+    *   Added missing `vi` import in `GlobalLedger.test.tsx`.
+    *   Added `vitest/globals` types to `client/tsconfig.app.json`.
+    *   Fixed production static file path in `client/server/src/index.ts` (`__dirname/../dist` → `__dirname/../../dist`).
+*   **Test Results**: All 3 E2E tests pass in 28s runtime.
+    *   `[chromium] › offline-consistency.spec.ts:30:3` — ✓ (15.5s)
+    *   `[chromium] › realtime-sync.spec.ts:79:3` — ✓ (5.2s)
+    *   `[chromium] › realtime-sync.spec.ts:133:3` — ✓ (164ms)
+*   **Files created**:
+    - `e2e/package.json` — Playwright dependencies
+    - `e2e/playwright.config.ts` — Chromium config, 120s timeout, 1 worker
+    - `e2e/tsconfig.json` — TypeScript config for E2E tests
+    - `e2e/helpers/servers.ts` — Server lifecycle (start/stop/restart hub + nodes)
+    - `e2e/tests/realtime-sync.spec.ts` — Real-time sync scenarios (2 tests)
+    - `e2e/tests/offline-consistency.spec.ts` — Offline + eventual consistency scenario
+*   **Files modified**:
+    - `client/src/components/ProcessClaim.tsx` — Removed redundant formStatus comparison
+    - `client/src/components/__tests__/GlobalLedger.test.tsx` — Added `vi` import
+    - `client/tsconfig.app.json` — Added `vitest/globals` to types
+    - `client/server/src/index.ts` — Fixed production static path resolution
+    - `MEMORY.md` — this entry
 
