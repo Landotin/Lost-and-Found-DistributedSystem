@@ -283,6 +283,81 @@ export async function getItemById(id: string): Promise<Item | undefined> {
   return db.get<Item>('SELECT * FROM items WHERE id = ?', [id]);
 }
 
+/**
+ * Find items with the opposite status that match the given query string.
+ * Uses SQL LIKE for case-insensitive fuzzy matching on item_name.
+ * Returns items with joined surrenderer and claimant person data.
+ *
+ * @param q - Search query (min 2 chars for meaningful results)
+ * @param oppositeStatus - The status to search for (e.g., 'lost' when user is logging 'found')
+ */
+export async function findMatchingItems(
+  q: string,
+  oppositeStatus: ItemStatus
+): Promise<Item[]> {
+  const pattern = `%${q}%`;
+  const rows = await db.all<any[]>(`
+    SELECT
+      i.*,
+      s.full_name AS s_full_name,
+      s.mobile AS s_mobile,
+      s.id_type AS s_id_type,
+      s.id_number AS s_id_number,
+      c.full_name AS c_full_name,
+      c.mobile AS c_mobile,
+      c.id_type AS c_id_type,
+      c.id_number AS c_id_number
+    FROM items i
+    LEFT JOIN persons s ON i.surrendered_by = s.id
+    LEFT JOIN persons c ON i.claimed_by = c.id
+    WHERE i.status = ? AND i.item_name LIKE ?
+    ORDER BY i.created_at DESC
+  `, [oppositeStatus, pattern]);
+
+  return rows.map((row) => {
+    const item: Item = {
+      id: row.id,
+      item_name: row.item_name,
+      description: row.description,
+      category: row.category,
+      department_origin: row.department_origin,
+      status: row.status,
+      surrendered_by: row.surrendered_by,
+      claimed_by: row.claimed_by,
+      claimed_at: row.claimed_at,
+      synced: row.synced,
+      updated_at: row.updated_at,
+      created_at: row.created_at,
+    };
+
+    if (row.surrendered_by) {
+      item.surrenderedByPerson = {
+        id: row.surrendered_by,
+        full_name: row.s_full_name,
+        mobile: row.s_mobile,
+        id_type: row.s_id_type ?? undefined,
+        id_number: row.s_id_number ?? undefined,
+      };
+    } else {
+      item.surrenderedByPerson = null;
+    }
+
+    if (row.claimed_by) {
+      item.claimedByPerson = {
+        id: row.claimed_by,
+        full_name: row.c_full_name,
+        mobile: row.c_mobile,
+        id_type: row.c_id_type ?? undefined,
+        id_number: row.c_id_number ?? undefined,
+      };
+    } else {
+      item.claimedByPerson = null;
+    }
+
+    return item;
+  });
+}
+
 export async function getPendingSyncItems(): Promise<Item[]> {
   return db.all<Item[]>('SELECT * FROM items WHERE synced = 0 ORDER BY created_at ASC');
 }

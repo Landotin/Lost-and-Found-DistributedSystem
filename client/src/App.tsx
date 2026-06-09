@@ -148,7 +148,14 @@ export default function App() {
             deptName={deptName}
           />
         ) : activeTab === 'log' ? (
-          <LogItemForm />
+          <LogItemForm
+            onNavigate={(tab, itemId) => {
+              if (tab === 'claim' && itemId) {
+                setProcessClaimItemId(itemId);
+              }
+              setActiveTab(tab);
+            }}
+          />
         ) : activeTab === 'claim' ? (
           <ProcessClaim
             items={items}

@@ -27,6 +27,7 @@ vi.mock('./database.js', () => ({
   createItem: vi.fn().mockResolvedValue(undefined),
   updateItemStatus: vi.fn().mockResolvedValue(undefined),
   markItemSynced: vi.fn().mockResolvedValue(undefined),
+  findMatchingItems: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('./ws-client.js', () => {
@@ -102,6 +103,77 @@ describe('Client Server — Entry Point', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
+  });
+
+  // -----------------------------------------------------------------------
+  // Smart Matching — /api/items/matches
+  // -----------------------------------------------------------------------
+
+  it('GET /api/items/matches?q=wat&status=found returns 200 with matches array', async () => {
+    const { findMatchingItems } = await import('./database.js');
+    (findMatchingItems as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        id: 'matched-item-1',
+        item_name: 'Water Bottle',
+        status: 'lost',
+        department_origin: 'CCS',
+        synced: 1,
+        surrenderedByPerson: { id: 'p1', full_name: 'Alice', mobile: '+639171234567' },
+      },
+    ]);
+
+    const res = await fetch(`http://localhost:${port}/api/items/matches?q=wat&status=found`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: unknown[] };
+    expect(body).toHaveProperty('matches');
+    expect(Array.isArray(body.matches)).toBe(true);
+    expect(body.matches.length).toBe(1);
+    expect((body.matches[0] as Record<string, unknown>).id).toBe('matched-item-1');
+    expect(findMatchingItems).toHaveBeenCalledWith('wat', 'lost');
+  });
+
+  it('GET /api/items/matches?q=wat&status=lost returns found items', async () => {
+    const { findMatchingItems } = await import('./database.js');
+    (findMatchingItems as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        id: 'matched-item-2',
+        item_name: 'Water Bottle',
+        status: 'found',
+        department_origin: 'COE',
+        synced: 1,
+        surrenderedByPerson: { id: 'p2', full_name: 'Bob', mobile: '+639171234567' },
+      },
+    ]);
+
+    const res = await fetch(`http://localhost:${port}/api/items/matches?q=wat&status=lost`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: unknown[] };
+    expect(body.matches.length).toBe(1);
+    expect(findMatchingItems).toHaveBeenCalledWith('wat', 'found');
+  });
+
+  it('GET /api/items/matches?q=a&status=found returns empty matches when q < 2 chars', async () => {
+    const res = await fetch(`http://localhost:${port}/api/items/matches?q=a&status=found`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: unknown[] };
+    expect(body.matches).toEqual([]);
+  });
+
+  it('GET /api/items/matches?q=water&status=invalid returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/items/matches?q=water&status=invalid`);
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/items/matches without status returns 400', async () => {
+    const res = await fetch(`http://localhost:${port}/api/items/matches?q=water`);
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/items/matches without q returns empty matches', async () => {
+    const res = await fetch(`http://localhost:${port}/api/items/matches`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: unknown[] };
+    expect(body.matches).toEqual([]);
   });
 
   it('GET /api/pending returns 200 with pending sync info', async () => {

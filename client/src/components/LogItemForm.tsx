@@ -1,16 +1,17 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, WifiOff } from 'lucide-react';
 import { validateMobile, validateRequired } from '../utils/validation';
 import type { Item, CreatePersonPayload, CreateItemPayload } from '../types';
-import { createPerson, createItem } from '../hooks/useApi';
+import { createPerson, createItem, fetchMatchingItems } from '../hooks/useApi';
 
 interface LogItemFormProps {
   onItemCreated?: (item: Item) => void;
+  onNavigate?: (tab: 'lost-items' | 'claim', itemId?: string) => void;
 }
 
 type FormStatus = 'idle' | 'submitting' | 'success' | 'error' | 'offline';
 
-export default function LogItemForm({ onItemCreated }: LogItemFormProps) {
+export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormProps) {
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState<'lost' | 'found'>('lost');
@@ -24,6 +25,12 @@ export default function LogItemForm({ onItemCreated }: LogItemFormProps) {
   const [errorMessage, setErrorMessage] = useState('');
   const [lastCreatedPersonId, setLastCreatedPersonId] = useState<string | null>(null);
 
+  // Smart matching state
+  const [matches, setMatches] = useState<Item[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [dismissedMatch, setDismissedMatch] = useState(false);
+  const searchRef = useRef<ReturnType<typeof setTimeout>>(null);
+
   const resetForm = () => {
     setItemName('');
     setCategory('');
@@ -35,7 +42,49 @@ export default function LogItemForm({ onItemCreated }: LogItemFormProps) {
     setIdNumber('');
     setErrors({});
     setLastCreatedPersonId(null);
+    setMatches([]);
+    setDismissedMatch(false);
   };
+
+  // ---------------------------------------------------------------------------
+  // Smart Matching — debounced search for existing opposite-direction items
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    // Clear previous search timer
+    if (searchRef.current) {
+      clearTimeout(searchRef.current);
+    }
+
+    // Reset dismiss when search params change
+    setDismissedMatch(false);
+
+    // Require at least 2 chars for meaningful search
+    if (itemName.trim().length < 2) {
+      setMatches([]);
+      return;
+    }
+
+    setMatchesLoading(true);
+
+    searchRef.current = setTimeout(async () => {
+      try {
+        const result = await fetchMatchingItems(itemName.trim(), status);
+        setMatches(result.matches);
+      } catch {
+        // Silently fail — matching is non-blocking
+        setMatches([]);
+      } finally {
+        setMatchesLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchRef.current) {
+        clearTimeout(searchRef.current);
+      }
+    };
+  }, [itemName, status]);
 
   const performSubmit = async () => {
     const newErrors: Record<string, string> = {};
@@ -140,6 +189,77 @@ export default function LogItemForm({ onItemCreated }: LogItemFormProps) {
         <div className="flex items-center gap-2 rounded-lg border border-yellow-700 bg-yellow-900/50 p-4 text-yellow-200">
           <WifiOff size={20} />
           <span>Saved offline — will sync when connected</span>
+        </div>
+      )}
+
+      {/* Smart Matching — suggestion banner */}
+      {!dismissedMatch && matches.length > 0 && !matchesLoading && (
+        <div
+          className={`rounded-lg border p-4 ${
+            status === 'found'
+              ? 'border-yellow-600 bg-yellow-900/30'
+              : 'border-blue-600 bg-blue-900/30'
+          }`}
+          role="alert"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              {status === 'found' ? (
+                <>
+                  <p className="text-sm font-medium text-yellow-200">
+                    ⚠ This item was reported lost
+                  </p>
+                  <p className="mt-1 text-xs text-yellow-300/90">
+                    &ldquo;{matches[0].item_name}&rdquo; was reported lost by{' '}
+                    {matches[0].department_origin}. Consider marking the lost
+                    record as found instead.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.('lost-items', matches[0].id)}
+                      className="rounded bg-yellow-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    >
+                      Mark as Found
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDismissedMatch(true)}
+                      className="rounded border border-yellow-600 px-3 py-1 text-xs font-medium text-yellow-300 transition-colors hover:bg-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-blue-200">
+                    ⚠ This item was already found
+                  </p>
+                  <p className="mt-1 text-xs text-blue-300/90">
+                    &ldquo;{matches[0].item_name}&rdquo; was found by{' '}
+                    {matches[0].department_origin}. Consider claiming it instead.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.('claim', matches[0].id)}
+                      className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      Claim Instead
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDismissedMatch(true)}
+                      className="rounded border border-blue-600 px-3 py-1 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

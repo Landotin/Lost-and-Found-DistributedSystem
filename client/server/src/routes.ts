@@ -9,6 +9,7 @@ import {
   getPendingSyncItems,
   updateItemStatus,
   markItemSynced,
+  findMatchingItems,
   normalizeMobile,
   Person,
   Item,
@@ -100,6 +101,38 @@ export function createApiRouter(
     } catch (err) {
       console.error('[API] Error fetching items:', err);
       res.status(500).json({ error: 'Failed to fetch items' });
+    }
+  });
+
+  // --- Smart Matching ---
+  // IMPORTANT: MUST be registered before /items/:id to avoid Express matching
+  // "matches" as an :id parameter.
+
+  router.get('/items/matches', async (req: Request, res: Response) => {
+    try {
+      const q = req.query.q as string | undefined;
+      const status = req.query.status as string | undefined;
+
+      if (!q || q.length < 2) {
+        res.json({ matches: [] });
+        return;
+      }
+
+      if (!status || !['lost', 'found'].includes(status)) {
+        res.status(400).json({ error: 'status must be "lost" or "found"' });
+        return;
+      }
+
+      // Search the opposite direction:
+      //   logging 'found' → find matching 'lost' items
+      //   logging 'lost'  → find matching 'found' items
+      const oppositeStatus: ItemStatus = status === 'found' ? 'lost' : 'found';
+      const matches = await findMatchingItems(q.trim(), oppositeStatus);
+
+      res.json({ matches });
+    } catch (err) {
+      console.error('[API] Error searching matches:', err);
+      res.status(500).json({ error: 'Failed to search matching items' });
     }
   });
 

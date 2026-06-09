@@ -51,3 +51,12 @@ export function updateItemStatus(id: string, status: ItemStatus, claimed_by?: st
 export function fetchPendingSync(): Promise<PendingSyncResponse> {
   return request<PendingSyncResponse>('/api/pending', { method: 'GET' });
 }
+
+export interface MatchResponse {
+  matches: Item[];
+}
+
+export function fetchMatchingItems(q: string, status: 'lost' | 'found'): Promise<MatchResponse> {
+  const params = new URLSearchParams({ q, status });
+  return request<MatchResponse>(`/api/items/matches?${params}`, { method: 'GET' });
+}

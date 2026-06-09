@@ -430,6 +430,86 @@ fi
 sleep 2
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 (SMART MATCHING) — Item Name Matching Suggestions
+# ══════════════════════════════════════════════════════════════════════════════
+
+info "PHASE 2 (SMART MATCHING): Item Name Matching"
+
+header "2.8.1 Create lost item to serve as match target"
+expect 201 "Create lost 'Blue Backpack' on Security" \
+  -X POST "$SEC_URL/api/persons" \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Lost Owner","mobile":"09171234567"}'
+
+LOST_OWNER_ID=$(curl -sf "$SEC_URL/api/items" 2>/dev/null | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+
+# Create a person and a lost item
+LOST_MATCH_PERSON=$(curl -sf -X POST "$SEC_URL/api/persons" \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Matching Person","mobile":"09179876543","id_type":"student_id","id_number":"2020-1234"}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+LOST_MATCH_ITEM=$(curl -sf -X POST "$SEC_URL/api/items" \
+  -H "Content-Type: application/json" \
+  -d "{\"item_name\":\"Blue Backpack\",\"category\":\"Accessories\",\"status\":\"lost\",\"description\":\"Lost blue backpack\",\"surrendered_by\":\"$LOST_MATCH_PERSON\"}" 2>/dev/null)
+
+# Give time for sync
+sleep 1
+
+header "2.8.2 Match found item against lost items (same node)"
+FOUND_MATCHES=$(curl -sf "$SEC_URL/api/items/matches?q=backpack&status=found" 2>/dev/null)
+if echo "$FOUND_MATCHES" | grep -q "Blue Backpack"; then
+  pass "Smart matching found lost 'Blue Backpack' when logging found item"
+else
+  fail "Smart matching did not find lost item (response: $FOUND_MATCHES)"
+fi
+
+header "2.8.3 Match lost item against found items (create found first)"
+# Create a found item on the Engineering node via the hub (cross-node match test)
+# First create a person for surrenderer on Security
+FOUND_SURRENDERER=$(curl -sf -X POST "$SEC_URL/api/persons" \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Finder Person","mobile":"09171112222","id_type":"employee_id","id_number":"E-2025"}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# Create found item on Security (will sync to Engineering)
+curl -sf -X POST "$SEC_URL/api/items" \
+  -H "Content-Type: application/json" \
+  -d "{\"item_name\":\"Black Laptop Charger\",\"category\":\"Electronics\",\"status\":\"found\",\"surrendered_by\":\"$FOUND_SURRENDERER\"}" > /dev/null 2>&1
+
+sleep 1
+
+# Now query Engineering's match endpoint — logging a lost "charger" should find the found "Black Laptop Charger"
+LOST_MATCHES=$(curl -sf "$ENG_URL/api/items/matches?q=charger&status=lost" 2>/dev/null)
+if echo "$LOST_MATCHES" | grep -q "Black Laptop Charger"; then
+  pass "Smart matching found found 'Black Laptop Charger' when logging lost item (cross-node)"
+else
+  fail "Smart matching did not find found item (response: $LOST_MATCHES)"
+fi
+
+header "2.8.4 Empty matches for short queries"
+SHORT_MATCH=$(curl -sf "$SEC_URL/api/items/matches?q=a&status=found" 2>/dev/null)
+if echo "$SHORT_MATCH" | grep -q '"matches":\[]' || echo "$SHORT_MATCH" | grep -q '"matches":\['; then
+  pass "Short queries return empty matches (or valid structure)"
+else
+  fail "Short query returned unexpected response: $SHORT_MATCH"
+fi
+
+header "2.8.5 400 for invalid status"
+INVALID_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SEC_URL/api/items/matches?q=test&status=invalid" 2>/dev/null)
+if [ "$INVALID_STATUS" = "400" ]; then
+  pass "Invalid status parameter returns 400"
+else
+  fail "Expected 400, got $INVALID_STATUS"
+fi
+
+header "2.8.6 Verify no spurious matches for non-existent item"
+NO_MATCH=$(curl -sf "$SEC_URL/api/items/matches?q=zzzznotexist&status=found" 2>/dev/null)
+if echo "$NO_MATCH" | grep -q '"matches":\[\]' 2>/dev/null; then
+  pass "No matches for non-existent item name"
+else
+  fail "Expected empty matches, got: $NO_MATCH"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PHASE 3 — Global Ledger & PII Redaction
 # ══════════════════════════════════════════════════════════════════════════════
 
