@@ -31,6 +31,7 @@ export function useItemFilter(
         String(item.id).includes(q) ||
         (item.surrenderer_full_name?.toLowerCase().includes(q) ?? false) ||
         (item.claimant_full_name?.toLowerCase().includes(q) ?? false) ||
+        (item.reporter_full_name?.toLowerCase().includes(q) ?? false) ||
         item.status.toLowerCase().includes(q)
       )
     })

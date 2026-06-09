@@ -6,14 +6,17 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Phase 2 Smart Matching completed — when logging a found/lost item, the system debounce-searches for existing opposite-direction records and shows a non-blocking suggestion banner with cross-tab routing. 202 client tests + 81 server tests + 96 integration tests all passing.
+*   **Task Compile**: Contact info for lost-item reporters (`reported_by`) + image upload support (`image_data`) implemented across the full stack. Lost item registrants now provide a contact number so the department can reach them when the item is found. Users can upload item photos in LogItemForm with client-side resize; thumbnails render in all table/card views, full images in detail modals. 378/378 tests passing across all suites.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Phase 2 Smart Matching backend: `findMatchingItems()` DB function + `GET /api/items/matches` endpoint
-    *   `[x]` Phase 2 Smart Matching frontend: debounced match search + suggestion banners in LogItemForm
-    *   `[x]` Phase 2 Cross-tab routing: "Mark as Found" → LostItems tab, "Claim Instead" → ProcessClaim tab
-    *   `[x]` 6 backend + 5 frontend + 6 integration smart matching tests
-    *   `[x]` All 202 frontend + 81 server + 96 integration tests passing
+    *   `[x]` `reported_by` — new DB column (node + hub), shared types, API routes, sync handlers, PII redaction
+    *   `[x]` Contact info section in LogItemForm when status="lost" (name + mobile required)
+    *   `[x]` Reporters appear in department list views (LostItems table + modal), GlobalLedger, and all hub dashboard pages
+    *   `[x]` `image_data` — new DB column (node + hub), client-side resize utility, file input with preview
+    *   `[x]` Image thumbnails in all table views, full image display in all detail modals
+    *   `[x]` Cross-department PII redaction extended to reporter person data
+    *   `[x]` 4 new integration tests + updated frontend tests for new form fields
+    *   `[x]` All 378 tests passing (40 node server + 81 hub server + 202 frontend + 55 dashboard)
 *   **Pending Tasks**:
     *   `[ ]` Offline sync reliability — items created during offline should maintain `synced=0` through status updates
     *   `[ ]` Hub Dashboard — avg time-to-claim analytics, offline event count
@@ -533,4 +536,28 @@ This file tracks the historical context, architectural decisions, completed mile
     - Smart matching (Phase 2) not yet implemented — if a user logs a found item when a matching lost report exists, the system does not yet suggest the match
     - Reverse direction (logging a lost item when a matching found report exists) also lacks suggestions
 *   **Next Steps**: Implement Phase 2 — smart matching suggestions on LogItemForm to detect existing opposite-direction records before creating duplicates.
+
+### Session: 2026-06-09 (Contact Info for Lost Reporters + Image Upload)
+
+*   **Scope**: Implemented two major usability features across the full stack — `reported_by` contact info for lost-item registrants and `image_data` upload support for item photos.
+*   **Problem 1 — No contact info for lost reporters**: When logging a lost item, the system collected no contact information, making it impossible for departments to reach the reporter when the item was found. Only found items collected finder (surrenderer) details.
+*   **Solution 1 — `reported_by`**: Added a `reported_by TEXT REFERENCES persons(id)` column to the items table on both node and hub databases, mirroring the existing `surrendered_by`/`claimed_by` pattern. When status="lost", LogItemForm shows a "Your Contact Information" section collecting full_name + mobile (required) and optional id_type/id_number. Submitted items link to a new Person record via `reported_by`.
+*   **Problem 2 — No image support**: Items were text-only, making visual identification difficult across dashboard views.
+*   **Solution 2 — `image_data`**: Added an `image_data TEXT` column storing base64-encoded JPEG data URLs. Client-side resize utility (`client/src/utils/image.ts`) resizes to max 800px width at 0.85 quality before upload. Images flow through all sync paths (ITEM_BROADCAST, STATUS_UPDATE, SYNC_DUMP, SYNC_QUEUE_FLUSH) as plain text — no new infrastructure needed. Thumbnails (40×40 rounded) render in all table/card views; full images display in detail modals.
+*   **Backend Details**:
+    - Both node (`client/server/src/database.ts`) and hub (`server/src/database.ts`) got schema migrations with PRAGMA table_info fallback for existing databases
+    - `handleIncomingItem()` and `handleIncomingStatusUpdate()` reconstruct reporter person from both object and flat-field (SYNC_DUMP) payloads, including `normalizeMobile()` for mobile number normalization
+    - `getAllItemsWithPII()` and `getSyncDumpForNode()` on hub now LEFT JOIN persons for reporter, with PII redaction for cross-department sync dumps
+    - `broadcastToOthers()` in connection-manager redacts reporter PII for unrelated departments
+    - Hub `STATUS_UPDATE` handler preserves `existingItem.reported_by` and `existingItem.image_data`
+*   **Frontend Details**:
+    - `LogItemForm.tsx` — Contact fields show when `status='lost'` (heading: "Your Contact Information"), surrenderer fields show when `status='found'` (heading: "Surrenderer Details"). File input with image/* accept, 5MB limit, preview thumbnail, remove button
+    - `client/src/utils/image.ts` — New `resizeImage(file, maxWidth?, quality?)` utility using FileReader + off-screen Image + canvas
+    - All 4 department list views (LostItems, FoundItems, ClaimedItems, GlobalLedger) and all 4 hub dashboard pages (AllItems, LostItems, FoundItems, ClaimedItems) updated with Photo column + Reporter column
+    - All detail modals show full image at top + Reporter PII section with cross-dept redaction
+    - `useItemFilter` searches reporter names
+    - CSV export includes reporter columns
+*   **Test Results**: 378/378 ALL TESTS PASSING (40 node server + 81 hub server + 202 frontend + 55 hub dashboard)
+*   **Files created**: `client/src/utils/image.ts`
+*   **Files modified**: `client/src/types.ts`, `client/server/src/database.ts`, `server/src/database.ts`, `client/server/src/routes.ts`, `server/src/index.ts`, `server/src/connection-manager.ts`, `client/src/components/LogItemForm.tsx`, `client/src/components/LostItems.tsx`, `client/src/components/FoundItems.tsx`, `client/src/components/ClaimedItems.tsx`, `client/src/components/GlobalLedger.tsx`, `client/src/components/__tests__/LogItemForm.test.tsx`, `hub-dashboard/src/hooks/useAdminApi.ts`, `hub-dashboard/src/hooks/useItemFilter.ts`, `hub-dashboard/src/pages/AllItems.tsx`, `hub-dashboard/src/pages/LostItems.tsx`, `hub-dashboard/src/pages/FoundItems.tsx`, `hub-dashboard/src/pages/ClaimedItems.tsx`, `test_all_phases.sh`, `MEMORY.md`
 

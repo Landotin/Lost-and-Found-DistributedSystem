@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, WifiOff } from 'lucide-react';
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react';
+import { Loader2, CheckCircle2, AlertCircle, WifiOff, X } from 'lucide-react';
 import { validateMobile, validateRequired } from '../utils/validation';
+import { resizeImage } from '../utils/image';
 import type { Item, CreatePersonPayload, CreateItemPayload } from '../types';
 import { createPerson, createItem, fetchMatchingItems } from '../hooks/useApi';
 
@@ -25,6 +26,43 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
   const [errorMessage, setErrorMessage] = useState('');
   const [lastCreatedPersonId, setLastCreatedPersonId] = useState<string | null>(null);
 
+  // Image upload state
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageUploadingRef = useRef(false);
+
+  const handleImageSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('Image must be under 5MB');
+      return;
+    }
+
+    setImageError(null);
+    imageUploadingRef.current = true;
+
+    try {
+      const dataUrl = await resizeImage(file);
+      setImageData(dataUrl);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : 'Failed to process image');
+    } finally {
+      imageUploadingRef.current = false;
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageData(null);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Smart matching state
   const [matches, setMatches] = useState<Item[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -44,6 +82,11 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
     setLastCreatedPersonId(null);
     setMatches([]);
     setDismissedMatch(false);
+    setImageData(null);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -102,6 +145,13 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
       if (!validateMobile(mobile)) {
         newErrors.mobile = 'Mobile must be a valid number (+639XXXXXXXXX)';
       }
+    } else if (status === 'lost') {
+      if (!validateRequired(fullName)) {
+        newErrors.fullName = 'Your name is required';
+      }
+      if (!validateMobile(mobile)) {
+        newErrors.mobile = 'Mobile must be a valid number (+639XXXXXXXXX)';
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -115,10 +165,10 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
 
     try {
       let surrenderedBy: string | undefined;
+      let reportedBy: string | undefined;
 
       if (status === 'found') {
         if (lastCreatedPersonId) {
-          // Reuse the already created person record from a previous failed attempt
           surrenderedBy = lastCreatedPersonId;
         } else {
           const personPayload: CreatePersonPayload = {
@@ -132,6 +182,21 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
           surrenderedBy = person.id;
           setLastCreatedPersonId(person.id);
         }
+      } else if (status === 'lost') {
+        if (lastCreatedPersonId) {
+          reportedBy = lastCreatedPersonId;
+        } else {
+          const personPayload: CreatePersonPayload = {
+            full_name: fullName.trim(),
+            mobile,
+            id_type: idType || undefined,
+            id_number: idNumber || undefined,
+          };
+
+          const person = await createPerson(personPayload);
+          reportedBy = person.id;
+          setLastCreatedPersonId(person.id);
+        }
       }
 
       const itemPayload: CreateItemPayload = {
@@ -140,6 +205,8 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
         status,
         description: description.trim() || undefined,
         surrendered_by: surrenderedBy,
+        reported_by: reportedBy,
+        image_data: imageData ?? undefined,
       };
 
       const createdItem = await createItem(itemPayload);
@@ -166,7 +233,7 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
   };
 
   const isSubmitting = formStatus === 'submitting';
-  const showSurrenderer = status === 'found';
+  const showPersonSection = status === 'found' || status === 'lost';
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-lg space-y-6 rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg">
@@ -359,12 +426,55 @@ export default function LogItemForm({ onItemCreated, onNavigate }: LogItemFormPr
             placeholder="Optional description"
           />
         </div>
+
+        {/* Item Photo (optional) */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-300">Item Photo (optional)</label>
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              id="item-photo"
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              disabled={isSubmitting || imageUploadingRef.current}
+              className="block w-full text-sm text-gray-400 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-gray-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-200 hover:file:bg-gray-600 disabled:opacity-50"
+            />
+            {imageData && (
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                disabled={isSubmitting}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-red-700 px-2 py-2 text-xs text-red-400 transition-colors hover:bg-red-900/30 disabled:opacity-50"
+                aria-label="Remove image"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {imageError && (
+            <p className="mt-1 text-sm text-red-400">{imageError}</p>
+          )}
+
+          {imageData && (
+            <div className="mt-3">
+              <img
+                src={imageData}
+                alt="Item photo preview"
+                className="max-h-48 rounded-lg border border-gray-700 object-contain"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Surrenderer Section (conditional) */}
-      {showSurrenderer && (
+      {/* Contact Section (conditional) */}
+      {showPersonSection && (
         <div className="space-y-4 border-t border-gray-700 pt-4">
-          <h2 className="text-lg font-semibold text-gray-200">Surrenderer Details</h2>
+          <h2 className="text-lg font-semibold text-gray-200">
+            {status === 'found' ? 'Surrenderer Details' : 'Your Contact Information'}
+          </h2>
 
           {/* Full Name */}
           <div>

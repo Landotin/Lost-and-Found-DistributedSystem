@@ -163,7 +163,7 @@ export function createApiRouter(
     try {
       const {
         item_name, description, category, status,
-        surrendered_by,
+        surrendered_by, reported_by, image_data,
       } = req.body;
 
       if (!item_name || !status) {
@@ -184,6 +184,14 @@ export function createApiRouter(
         }
       }
 
+      if (reported_by) {
+        const reporter = await getPersonById(reported_by);
+        if (!reporter) {
+          res.status(400).json({ error: 'Reporter person not found' });
+          return;
+        }
+      }
+
       const isConnected = wsManager.connectionStatus === 'connected';
 
       const item: Item = {
@@ -194,6 +202,8 @@ export function createApiRouter(
         department_origin: deptName,
         status: status as ItemStatus,
         surrendered_by: surrendered_by ?? null,
+        reported_by: reported_by ?? null,
+        image_data: image_data ?? null,
         synced: isConnected ? 1 : 0,    // 0 = offline, will sync later
       };
 
@@ -201,10 +211,15 @@ export function createApiRouter(
 
       // If online, broadcast to hub immediately
       if (isConnected) {
-        // Fetch full surrenderer person details
+        // Fetch full person details
         let surrenderedByPerson: Person | null = null;
         if (item.surrendered_by) {
-          surrenderedByPerson = await getPersonById(item.surrendered_by);
+          surrenderedByPerson = (await getPersonById(item.surrendered_by)) ?? null;
+        }
+
+        let reportedByPerson: Person | null = null;
+        if (item.reported_by) {
+          reportedByPerson = (await getPersonById(item.reported_by)) ?? null;
         }
 
         wsManager.send('ITEM_BROADCAST', {
@@ -215,6 +230,8 @@ export function createApiRouter(
           department_origin: item.department_origin,
           status: item.status,
           surrendered_by: surrenderedByPerson, // full person object or null
+          reported_by: reportedByPerson, // full person object or null
+          image_data: item.image_data,
           created_at: item.created_at ?? new Date().toISOString(),
         });
       }

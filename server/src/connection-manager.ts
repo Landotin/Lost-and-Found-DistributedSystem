@@ -172,11 +172,14 @@ export class ConnectionManager extends EventEmitter {
               ...payload,
               surrendered_by: redactPersonPII(payload.surrendered_by),
               claimed_by: redactPersonPII(payload.claimed_by),
+              reported_by: redactPersonPII(payload.reported_by),
             };
           } else if (event === 'STATUS_UPDATE') {
             relayedPayload = {
               ...payload,
               claimed_by: redactPersonPII(payload.claimed_by),
+              surrendered_by: redactPersonPII(payload.surrendered_by),
+              reported_by: redactPersonPII(payload.reported_by),
             };
           }
         }

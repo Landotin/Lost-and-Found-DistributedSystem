@@ -103,6 +103,16 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
 
         {/* Item details */}
         <div className="space-y-2">
+          {item.image_data && (
+            <div className="flex justify-center mb-4">
+              <img
+                src={item.image_data}
+                alt={item.item_name}
+                className="max-h-64 w-full rounded-lg border border-gray-700 object-contain"
+              />
+            </div>
+          )}
+
           <div>
             <span className="text-sm text-gray-400">Item Name</span>
             <p className="text-gray-200 font-medium">{item.item_name}</p>
@@ -147,6 +157,9 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
               <p className="text-gray-200">{formatDateTime(item.updated_at)}</p>
             </div>
           )}
+
+          {/* Reporter details */}
+          {item.reportedByPerson && renderPersonSection('Reported By', item.reportedByPerson)}
 
           {/* Surrenderer details */}
           {(item.status === 'found' || item.status === 'claimed') &&
@@ -290,6 +303,15 @@ export default function GlobalLedger({ items, loading, error, deptName, onProces
               onClick={() => setSelectedItem(item)}
               className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/50 px-5 py-4 cursor-pointer transition-colors hover:bg-gray-800/50"
             >
+              {/* Thumbnail */}
+              <div className="flex-shrink-0 mr-3">
+                {item.image_data ? (
+                  <img src={item.image_data} alt="" className="h-10 w-10 rounded-lg border border-gray-700 object-cover" />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-600 text-xs">N/A</span>
+                )}
+              </div>
+
               {/* Left column: Item Name + Category */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-200 truncate">{item.item_name}</p>

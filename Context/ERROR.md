@@ -165,6 +165,17 @@ Below are known high-risk failure modes anticipated during development:
 *   **Date**: 2026-06-09
 
 
+### ERR-018: Payload Too Large on Image Upload (Resolved)
+*   **Component**: Server / Client Server
+*   **Symptom**: When uploading an item photo in LogItemForm, the server returns HTTP 413 "Payload Too Large" and the item is not created. The image is accepted by the client (under 5MB, resized to 800px) but the server rejects it.
+*   **Root Cause**: Both `client/server/src/index.ts` and `server/src/index.ts` use `express.json()` with no options, which defaults to a **100KB** (`100kb`) limit on the JSON body. A base64-encoded JPEG at 800px width and 0.85 quality routinely exceeds 100KB (base64 adds ~33% overhead to the binary size).
+*   **Resolution**:
+    1. Increased `express.json()` limit to `10mb` on **both** the node server (`client/server/src/index.ts:20`) and the hub server (`server/src/index.ts:14`).
+    2. Added Express error-handling middleware after `express.json()` on both servers to catch `entity.too.large` errors and return a clear JSON message (`res.status(413).json({ error: 'Payload too large — image must be under 5MB' })`) instead of a raw HTML error.
+    3. Improved `client/src/hooks/useApi.ts:request()` to parse the JSON error body on non-OK responses (instead of using only `statusText`), so custom error messages from the server (like the 413 message) are surfaced to the user in the form's error banner.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09
+
 ### ERR-017: TypeScript Build Error — Dead Comparison in Narrowed JSX Block (LostItems.tsx)
 *   **Component**: Client (Frontend)
 *   **Symptom**: `npx tsc -b` fails with:

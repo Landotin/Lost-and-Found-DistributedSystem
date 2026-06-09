@@ -11,7 +11,14 @@ import path from 'path';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.too.large') {
+    res.status(413).json({ error: 'Payload too large — image must be under 5MB' });
+    return;
+  }
+  next(err);
+});
 
 let server: http.Server | null = null;
 let wss: WebSocketServer | null = null;
@@ -178,6 +185,10 @@ export async function startServer(): Promise<http.Server> {
         if (payload.surrendered_by?.id) {
           await savePerson(payload.surrendered_by);
         }
+        // Save reporter if provided
+        if (payload.reported_by?.id) {
+          await savePerson(payload.reported_by);
+        }
         // Save item
         await saveItem({
           id: payload.id,
@@ -188,7 +199,9 @@ export async function startServer(): Promise<http.Server> {
           status: payload.status,
           surrendered_by: payload.surrendered_by?.id ?? null,
           claimed_by: payload.claimed_by?.id ?? null,
+          reported_by: payload.reported_by?.id ?? null,
           claimed_at: payload.claimed_at ?? null,
+          image_data: payload.image_data ?? null,
           updated_at: payload.updated_at ?? null,
           created_at: payload.created_at ?? null,
         });
@@ -216,6 +229,11 @@ export async function startServer(): Promise<http.Server> {
           await savePerson(payload.surrendered_by);
         }
 
+        // Save reporter if provided
+        if (payload.reported_by?.id) {
+          await savePerson(payload.reported_by);
+        }
+
         // Fetch existing item to preserve fields and get origin department
         const existingItem = await db.get<any>(
           'SELECT * FROM items WHERE id = ?',
@@ -233,7 +251,9 @@ export async function startServer(): Promise<http.Server> {
             status: payload.status,
             surrendered_by: payload.surrendered_by?.id ?? existingItem.surrendered_by,
             claimed_by: payload.claimed_by?.id ?? null,
+            reported_by: existingItem.reported_by,
             claimed_at: payload.claimed_at ?? new Date().toISOString(),
+            image_data: existingItem.image_data,
             updated_at: payload.updated_at ?? new Date().toISOString(),
             created_at: existingItem.created_at,
           });
@@ -266,6 +286,9 @@ export async function startServer(): Promise<http.Server> {
           if (item.claimed_by?.id) {
             await savePerson(item.claimed_by);
           }
+          if (item.reported_by?.id) {
+            await savePerson(item.reported_by);
+          }
           await saveItem({
             id: item.id,
             item_name: item.item_name,
@@ -275,7 +298,9 @@ export async function startServer(): Promise<http.Server> {
             status: item.status,
             surrendered_by: item.surrendered_by?.id ?? null,
             claimed_by: item.claimed_by?.id ?? null,
+            reported_by: item.reported_by?.id ?? null,
             claimed_at: item.claimed_at ?? null,
+            image_data: item.image_data ?? null,
             updated_at: item.updated_at ?? null,
             created_at: item.created_at ?? null,
           });

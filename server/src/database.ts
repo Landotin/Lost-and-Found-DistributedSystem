@@ -27,10 +27,12 @@ export interface Item {
   status: ItemStatus;
   surrendered_by?: string;
   claimed_by?: string;
+  reported_by?: string;
   claimed_at?: string;
   synced?: number;
   updated_at?: string;
   created_at?: string;
+  image_data?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +87,25 @@ export async function initDatabase(
       status              TEXT CHECK(status IN ('lost','found','claimed')) NOT NULL,
       surrendered_by      TEXT REFERENCES persons(id),
       claimed_by          TEXT REFERENCES persons(id),
+      reported_by         TEXT REFERENCES persons(id),
       claimed_at          TIMESTAMP,
       synced              BOOLEAN DEFAULT 0,
       updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      image_data          TEXT
     );
   `);
+
+  // Migration: add columns that may not exist in older databases
+  const tableInfo = await database.all<Array<{ name: string }>>('PRAGMA table_info(items)');
+  const existingColumns = tableInfo.map(c => c.name);
+
+  if (!existingColumns.includes('reported_by')) {
+    await database.exec('ALTER TABLE items ADD COLUMN reported_by TEXT REFERENCES persons(id);');
+  }
+  if (!existingColumns.includes('image_data')) {
+    await database.exec('ALTER TABLE items ADD COLUMN image_data TEXT;');
+  }
 
   db = database;
   return database;
@@ -140,7 +155,9 @@ export async function saveItem(item: Item): Promise<void> {
            status = ?,
            surrendered_by = ?,
            claimed_by = ?,
+           reported_by = ?,
            claimed_at = ?,
+           image_data = ?,
            synced = ?,
            updated_at = ?,
            created_at = ?
@@ -152,8 +169,10 @@ export async function saveItem(item: Item): Promise<void> {
         item.status,
         item.surrendered_by ?? null,
         item.claimed_by ?? null,
+        item.reported_by ?? null,
         item.claimed_at ?? null,
-        item.synced ?? null,
+        item.image_data ?? null,
+        item.synced ?? 0,
         item.updated_at ?? new Date().toISOString(),
         item.created_at ?? null,
         item.id,
@@ -163,8 +182,8 @@ export async function saveItem(item: Item): Promise<void> {
   } else {
     // Insert new item
     await db.run(
-      `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by, claimed_by, claimed_at, synced, updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO items (id, item_name, description, category, department_origin, status, surrendered_by, claimed_by, reported_by, claimed_at, image_data, synced, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       item.id,
       item.item_name,
       item.description ?? null,
@@ -173,8 +192,10 @@ export async function saveItem(item: Item): Promise<void> {
       item.status,
       item.surrendered_by ?? null,
       item.claimed_by ?? null,
+      item.reported_by ?? null,
       item.claimed_at ?? null,
-      item.synced ?? null,
+      item.image_data ?? null,
+      item.synced ?? 0,
       item.updated_at ?? new Date().toISOString(),
       item.created_at ?? new Date().toISOString(),
     );
@@ -194,10 +215,12 @@ export interface SyncDumpItem {
   status: string;
   surrendered_by: string | null;
   claimed_by: string | null;
+  reported_by: string | null;
   claimed_at: string | null;
   synced: number | null;
   updated_at: string | null;
   created_at: string | null;
+  image_data: string | null;
   // Surrenderer details
   surrenderer_full_name: string | null;
   surrenderer_mobile: string | null;
@@ -208,6 +231,11 @@ export interface SyncDumpItem {
   claimant_mobile: string | null;
   claimant_id_type: string | null;
   claimant_id_number: string | null;
+  // Reporter details
+  reporter_full_name: string | null;
+  reporter_mobile: string | null;
+  reporter_id_type: string | null;
+  reporter_id_number: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,10 +253,12 @@ export async function getSyncDumpForNode(deptName: string): Promise<SyncDumpItem
        i.status,
        i.surrendered_by,
        i.claimed_by,
+       i.reported_by,
        i.claimed_at,
        i.synced,
        i.updated_at,
        i.created_at,
+       i.image_data,
        s.full_name AS surrenderer_full_name,
        s.mobile     AS surrenderer_mobile,
        s.id_type    AS surrenderer_id_type,
@@ -236,10 +266,15 @@ export async function getSyncDumpForNode(deptName: string): Promise<SyncDumpItem
        c.full_name  AS claimant_full_name,
        c.mobile     AS claimant_mobile,
        c.id_type    AS claimant_id_type,
-       c.id_number  AS claimant_id_number
+       c.id_number  AS claimant_id_number,
+       r.full_name  AS reporter_full_name,
+       r.mobile     AS reporter_mobile,
+       r.id_type    AS reporter_id_type,
+       r.id_number  AS reporter_id_number
      FROM items i
      LEFT JOIN persons s ON s.id = i.surrendered_by
      LEFT JOIN persons c ON c.id = i.claimed_by
+     LEFT JOIN persons r ON r.id = i.reported_by
      ORDER BY i.created_at ASC`,
   );
 
@@ -252,6 +287,9 @@ export async function getSyncDumpForNode(deptName: string): Promise<SyncDumpItem
       row.claimant_mobile = '[REDACTED]';
       row.claimant_id_type = '[REDACTED]';
       row.claimant_id_number = '[REDACTED]';
+      row.reporter_mobile = '[REDACTED]';
+      row.reporter_id_type = '[REDACTED]';
+      row.reporter_id_number = '[REDACTED]';
     }
   }
 
@@ -274,10 +312,15 @@ export async function getAllItemsWithPII(): Promise<any[]> {
        c.full_name AS claimant_full_name,
        c.mobile    AS claimant_mobile,
        c.id_type   AS claimant_id_type,
-       c.id_number AS claimant_id_number
+       c.id_number AS claimant_id_number,
+       r.full_name AS reporter_full_name,
+       r.mobile    AS reporter_mobile,
+       r.id_type   AS reporter_id_type,
+       r.id_number AS reporter_id_number
      FROM items i
      LEFT JOIN persons s ON s.id = i.surrendered_by
      LEFT JOIN persons c ON c.id = i.claimed_by
+     LEFT JOIN persons r ON r.id = i.reported_by
      ORDER BY i.created_at ASC`
   );
   return rows;

@@ -27,12 +27,15 @@ export interface Item {
   status: ItemStatus;
   surrendered_by?: string | null;
   claimed_by?: string | null;
+  reported_by?: string | null;
   claimed_at?: string | null;
   synced: number;       // 0 = pending sync, 1 = synced to hub
   updated_at?: string;
   created_at?: string;
+  image_data?: string | null;
   surrenderedByPerson?: Person | null;
   claimedByPerson?: Person | null;
+  reportedByPerson?: Person | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,12 +125,25 @@ export async function initDatabase(
       status              TEXT CHECK(status IN ('lost','found','claimed')) NOT NULL,
       surrendered_by      TEXT REFERENCES persons(id),
       claimed_by          TEXT REFERENCES persons(id),
+      reported_by         TEXT REFERENCES persons(id),
       claimed_at          TIMESTAMP,
       synced              BOOLEAN DEFAULT 0,
       updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      image_data          TEXT
     );
   `);
+
+  // Migration: add columns that may not exist in older databases
+  const tableInfo = await database.all<Array<{ name: string }>>('PRAGMA table_info(items)');
+  const existingColumns = tableInfo.map(c => c.name);
+
+  if (!existingColumns.includes('reported_by')) {
+    await database.exec('ALTER TABLE items ADD COLUMN reported_by TEXT REFERENCES persons(id);');
+  }
+  if (!existingColumns.includes('image_data')) {
+    await database.exec('ALTER TABLE items ADD COLUMN image_data TEXT;');
+  }
 
   db = database;
   return database;
@@ -200,8 +216,8 @@ export async function saveOrUpdatePerson(person: Person): Promise<void> {
 export async function createItem(item: Item): Promise<void> {
   await db.run(
     `INSERT INTO items (id, item_name, description, category, department_origin, status,
-                        surrendered_by, synced, updated_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        surrendered_by, claimed_by, reported_by, synced, updated_at, created_at, image_data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       item.id,
       item.item_name,
@@ -210,16 +226,19 @@ export async function createItem(item: Item): Promise<void> {
       item.department_origin,
       item.status,
       item.surrendered_by ?? null,
+      item.claimed_by ?? null,
+      item.reported_by ?? null,
       item.synced,
       item.updated_at ?? new Date().toISOString(),
       item.created_at ?? new Date().toISOString(),
+      item.image_data ?? null,
     ]
   );
 }
 
 export async function getAllItems(): Promise<Item[]> {
   const rows = await db.all<any[]>(`
-    SELECT 
+    SELECT
       i.*,
       s.full_name AS s_full_name,
       s.mobile AS s_mobile,
@@ -228,10 +247,15 @@ export async function getAllItems(): Promise<Item[]> {
       c.full_name AS c_full_name,
       c.mobile AS c_mobile,
       c.id_type AS c_id_type,
-      c.id_number AS c_id_number
+      c.id_number AS c_id_number,
+      r.full_name AS r_full_name,
+      r.mobile AS r_mobile,
+      r.id_type AS r_id_type,
+      r.id_number AS r_id_number
     FROM items i
     LEFT JOIN persons s ON i.surrendered_by = s.id
     LEFT JOIN persons c ON i.claimed_by = c.id
+    LEFT JOIN persons r ON i.reported_by = r.id
     ORDER BY i.created_at DESC
   `);
 
@@ -245,10 +269,12 @@ export async function getAllItems(): Promise<Item[]> {
       status: row.status,
       surrendered_by: row.surrendered_by,
       claimed_by: row.claimed_by,
+      reported_by: row.reported_by,
       claimed_at: row.claimed_at,
       synced: row.synced,
       updated_at: row.updated_at,
       created_at: row.created_at,
+      image_data: row.image_data ?? null,
     };
 
     if (row.surrendered_by) {
@@ -273,6 +299,18 @@ export async function getAllItems(): Promise<Item[]> {
       };
     } else {
       item.claimedByPerson = null;
+    }
+
+    if (row.reported_by) {
+      item.reportedByPerson = {
+        id: row.reported_by,
+        full_name: row.r_full_name,
+        mobile: row.r_mobile,
+        id_type: row.r_id_type ?? undefined,
+        id_number: row.r_id_number ?? undefined,
+      };
+    } else {
+      item.reportedByPerson = null;
     }
 
     return item;
@@ -306,10 +344,15 @@ export async function findMatchingItems(
       c.full_name AS c_full_name,
       c.mobile AS c_mobile,
       c.id_type AS c_id_type,
-      c.id_number AS c_id_number
+      c.id_number AS c_id_number,
+      r.full_name AS r_full_name,
+      r.mobile AS r_mobile,
+      r.id_type AS r_id_type,
+      r.id_number AS r_id_number
     FROM items i
     LEFT JOIN persons s ON i.surrendered_by = s.id
     LEFT JOIN persons c ON i.claimed_by = c.id
+    LEFT JOIN persons r ON i.reported_by = r.id
     WHERE i.status = ? AND i.item_name LIKE ?
     ORDER BY i.created_at DESC
   `, [oppositeStatus, pattern]);
@@ -324,10 +367,12 @@ export async function findMatchingItems(
       status: row.status,
       surrendered_by: row.surrendered_by,
       claimed_by: row.claimed_by,
+      reported_by: row.reported_by,
       claimed_at: row.claimed_at,
       synced: row.synced,
       updated_at: row.updated_at,
       created_at: row.created_at,
+      image_data: row.image_data ?? null,
     };
 
     if (row.surrendered_by) {
@@ -352,6 +397,18 @@ export async function findMatchingItems(
       };
     } else {
       item.claimedByPerson = null;
+    }
+
+    if (row.reported_by) {
+      item.reportedByPerson = {
+        id: row.reported_by,
+        full_name: row.r_full_name,
+        mobile: row.r_mobile,
+        id_type: row.r_id_type ?? undefined,
+        id_number: row.r_id_number ?? undefined,
+      };
+    } else {
+      item.reportedByPerson = null;
     }
 
     return item;
@@ -422,9 +479,11 @@ export async function handleIncomingItem(payload: {
   status: string;
   surrendered_by?: string | Person | null;
   claimed_by?: string | Person | null;
+  reported_by?: string | Person | null;
   claimed_at?: string | null;
   updated_at?: string;
   created_at?: string;
+  image_data?: string | null;
   person?: Person;
 }): Promise<void> {
   // 1. Save the associated person first if provided
@@ -468,6 +527,24 @@ export async function handleIncomingItem(payload: {
     await saveOrUpdatePerson(claimantPerson);
   }
 
+  // Handle reporter person if provided as an object or flat fields from SYNC_DUMP
+  let reporterPerson: Person | undefined;
+  if (payload.reported_by && typeof payload.reported_by === 'object') {
+    reporterPerson = payload.reported_by as Person;
+  } else if (payload.reported_by && typeof payload.reported_by === 'string' && (payload as any).reporter_full_name) {
+    reporterPerson = {
+      id: payload.reported_by,
+      full_name: (payload as any).reporter_full_name,
+      mobile: (payload as any).reporter_mobile ? normalizeMobile((payload as any).reporter_mobile) : '',
+      id_type: (payload as any).reporter_id_type ?? undefined,
+      id_number: (payload as any).reporter_id_number ?? undefined,
+    };
+  }
+
+  if (reporterPerson) {
+    await saveOrUpdatePerson(reporterPerson);
+  }
+
   // Normalize surrendered_by to a string (person ID) for database storage
   const surrenderedById: string | null =
     payload.surrendered_by && typeof payload.surrendered_by === 'object'
@@ -479,6 +556,12 @@ export async function handleIncomingItem(payload: {
     payload.claimed_by && typeof payload.claimed_by === 'object'
       ? (payload.claimed_by as Person).id
       : (payload.claimed_by as string | null) ?? null;
+
+  // Normalize reported_by to a string (person ID) for database storage
+  const reportedById: string | null =
+    payload.reported_by && typeof payload.reported_by === 'object'
+      ? (payload.reported_by as Person).id
+      : (payload.reported_by as string | null) ?? null;
 
   // 2. Check if the item already exists (for LWW comparison)
   const existing = await getItemById(payload.id);
@@ -507,7 +590,9 @@ export async function handleIncomingItem(payload: {
               status            = ?,
               surrendered_by    = ?,
               claimed_by        = ?,
+              reported_by       = ?,
               claimed_at        = ?,
+              image_data        = ?,
               synced            = 1,
               updated_at        = ?
         WHERE id = ?`,
@@ -519,7 +604,9 @@ export async function handleIncomingItem(payload: {
         payload.status,
         surrenderedById,
         claimedById,
+        reportedById,
         payload.claimed_at ?? null,
+        payload.image_data ?? null,
         payload.updated_at ?? new Date().toISOString(),
         payload.id,
       ]
@@ -528,8 +615,8 @@ export async function handleIncomingItem(payload: {
     await db.run(
       `INSERT INTO items
         (id, item_name, description, category, department_origin, status,
-         surrendered_by, claimed_by, claimed_at, synced, updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+         surrendered_by, claimed_by, reported_by, claimed_at, image_data, synced, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [
         payload.id,
         payload.item_name,
@@ -539,7 +626,9 @@ export async function handleIncomingItem(payload: {
         payload.status,
         surrenderedById,
         claimedById,
+        reportedById,
         payload.claimed_at ?? null,
+        payload.image_data ?? null,
         payload.updated_at ?? new Date().toISOString(),
         payload.created_at ?? new Date().toISOString(),
       ]
@@ -560,6 +649,7 @@ export async function handleIncomingStatusUpdate(payload: {
   status: string;
   claimed_by?: string | Person | null;
   surrendered_by?: string | Person | null;
+  reported_by?: string | Person | null;
   updated_at?: string;
 }): Promise<void> {
   // 1. Save the claimant person if provided as a full Person object or flat details
@@ -610,7 +700,31 @@ export async function handleIncomingStatusUpdate(payload: {
       ? (payload.surrendered_by as Person).id
       : (payload.surrendered_by as string | null) ?? null;
 
-  // 3. Check if the item exists (for LWW comparison)
+  // 3. Save the reporter person if provided
+  let reporterPerson: Person | undefined;
+  if (payload.reported_by && typeof payload.reported_by === 'object') {
+    reporterPerson = payload.reported_by as Person;
+  } else if (payload.reported_by && typeof payload.reported_by === 'string' && (payload as any).reporter_full_name) {
+    reporterPerson = {
+      id: payload.reported_by,
+      full_name: (payload as any).reporter_full_name,
+      mobile: (payload as any).reporter_mobile ? normalizeMobile((payload as any).reporter_mobile) : '',
+      id_type: (payload as any).reporter_id_type ?? undefined,
+      id_number: (payload as any).reporter_id_number ?? undefined,
+    };
+  }
+
+  if (reporterPerson) {
+    await saveOrUpdatePerson(reporterPerson);
+  }
+
+  // Normalize reported_by to a string (person ID) for database storage
+  const reportedById: string | null =
+    payload.reported_by && typeof payload.reported_by === 'object'
+      ? (payload.reported_by as Person).id
+      : (payload.reported_by as string | null) ?? null;
+
+  // 4. Check if the item exists (for LWW comparison)
   const existing = await getItemById(payload.id);
   if (!existing) {
     // Item doesn't exist locally — status update has nothing to act on
@@ -630,7 +744,7 @@ export async function handleIncomingStatusUpdate(payload: {
     return;
   }
 
-  // 4. Apply the status update
+  // 5. Apply the status update
   const claimedAt = payload.status === 'claimed'
     ? (payload.updated_at ?? new Date().toISOString())
     : null;

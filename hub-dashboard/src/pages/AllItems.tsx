@@ -15,6 +15,10 @@ function itemsToCsv(items: ItemDetail[]): string {
     'Department',
     'Lost Location',
     'Found Location',
+    'Reporter Name',
+    'Reporter Mobile',
+    'Reporter ID Type',
+    'Reporter ID Number',
     'Surrenderer Name',
     'Surrenderer Mobile',
     'Surrenderer ID Type',
@@ -35,6 +39,10 @@ function itemsToCsv(items: ItemDetail[]): string {
     item.department_origin,
     escapeCsvField(item.lost_location ?? ''),
     escapeCsvField(item.found_location ?? ''),
+    escapeCsvField(item.reporter_full_name ?? ''),
+    escapeCsvField(item.reporter_mobile ?? ''),
+    escapeCsvField(item.reporter_id_type ?? ''),
+    escapeCsvField(item.reporter_id_number ?? ''),
     escapeCsvField(item.surrenderer_full_name ?? ''),
     escapeCsvField(item.surrenderer_mobile ?? ''),
     escapeCsvField(item.surrenderer_id_type ?? ''),
@@ -118,6 +126,13 @@ function DetailModal({ item, onClose }: { item: ItemDetail | null; onClose: () =
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Item Photo */}
+          {item.image_data && (
+            <div className="flex justify-center">
+              <img src={item.image_data} alt={item.item_name} className="max-h-64 rounded-lg border border-gray-700 object-contain" />
+            </div>
+          )}
+
           {/* Basic Info */}
           <Section title="Basic Information">
             <Field label="Item Name" value={item.item_name} />
@@ -133,6 +148,16 @@ function DetailModal({ item, onClose }: { item: ItemDetail | null; onClose: () =
             <Field label="Lost Location" value={item.lost_location ?? '—'} />
             <Field label="Found Location" value={item.found_location ?? '—'} />
           </Section>
+
+          {/* Reporter PII */}
+          {item.reporter_full_name && (
+            <Section title="Reporter (PII)">
+              <Field label="Full Name" value={item.reporter_full_name} />
+              <Field label="Mobile" value={item.reporter_mobile ?? '—'} />
+              <Field label="ID Type" value={item.reporter_id_type ?? '—'} />
+              <Field label="ID Number" value={item.reporter_id_number ?? '—'} />
+            </Section>
+          )}
 
           {/* Surrenderer PII */}
           {item.surrenderer_full_name && (
@@ -327,10 +352,12 @@ function AllItems() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
+                  <th className="text-left px-6 py-3 text-gray-400 font-medium">Photo</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">ID</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Item</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Status</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Department</th>
+                  <th className="text-left px-6 py-3 text-gray-400 font-medium">Reporter</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Surrenderer</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Claimant</th>
                   <th className="text-right px-6 py-3 text-gray-400 font-medium">Actions</th>
@@ -339,6 +366,13 @@ function AllItems() {
               <tbody className="divide-y divide-gray-800">
                 {filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-800/50 transition-colors">
+                    <td className="px-6 py-4">
+                      {item.image_data ? (
+                        <img src={item.image_data} alt="" className="h-10 w-10 rounded-lg border border-gray-700 object-cover" />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-600 text-xs">N/A</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-gray-400 font-mono text-xs">{item.id}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -357,6 +391,7 @@ function AllItems() {
                     </td>
                     <td className="px-6 py-4"><StatusBadge status={item.status} /></td>
                     <td className="px-6 py-4 text-gray-300">{item.department_origin}</td>
+                    <td className="px-6 py-4 text-gray-300">{item.reporter_full_name ?? '—'}</td>
                     <td className="px-6 py-4 text-gray-300">{item.surrenderer_full_name ?? '—'}</td>
                     <td className="px-6 py-4 text-gray-300">{item.claimant_full_name ?? '—'}</td>
                     <td className="px-6 py-4 text-right">

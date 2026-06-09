@@ -20,8 +20,10 @@ export interface ItemDetail {
   found_location: string | null
   surrendered_by: number | null
   claimed_by: number | null
+  reported_by: number | null
   created_at: string
   updated_at: string
+  image_data: string | null
   surrenderer_full_name: string | null
   surrenderer_mobile: string | null
   surrenderer_id_type: string | null
@@ -30,6 +32,10 @@ export interface ItemDetail {
   claimant_mobile: string | null
   claimant_id_type: string | null
   claimant_id_number: string | null
+  reporter_full_name: string | null
+  reporter_mobile: string | null
+  reporter_id_type: string | null
+  reporter_id_number: string | null
 }
 
 /** Aggregated analytics data. */

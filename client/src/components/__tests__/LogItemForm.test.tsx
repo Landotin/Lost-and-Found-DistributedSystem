@@ -30,14 +30,22 @@ describe('LogItemForm', () => {
     expect(screen.getByLabelText(/id number/i)).toBeInTheDocument();
   });
 
-  it('hides surrenderer section when status toggled to "Lost"', async () => {
+  it('shows correct contact section heading based on status', async () => {
     render(<LogItemForm />);
 
-    await userEvent.click(screen.getByRole('radio', { name: /found/i }));
-    expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
+    // Default is lost, should show "Your Contact Information"
+    expect(screen.getByText(/your contact information/i)).toBeInTheDocument();
+    expect(screen.queryByText(/surrenderer details/i)).not.toBeInTheDocument();
 
+    // Toggle to found, should show "Surrenderer Details"
+    await userEvent.click(screen.getByRole('radio', { name: /found/i }));
+    expect(screen.getByText(/surrenderer details/i)).toBeInTheDocument();
+    expect(screen.queryByText(/your contact information/i)).not.toBeInTheDocument();
+
+    // Toggle back to lost, should show contact info again
     await userEvent.click(screen.getByRole('radio', { name: /lost/i }));
-    expect(screen.queryByLabelText(/full name/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/your contact information/i)).toBeInTheDocument();
+    expect(screen.queryByText(/surrenderer details/i)).not.toBeInTheDocument();
   });
 
   it('shows validation errors on empty submit', async () => {
@@ -59,16 +67,32 @@ describe('LogItemForm', () => {
       synced: 0,
     };
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockItem),
-    }));
+    // Mock handles multiple fetch calls: person creation, item creation, and smart matching
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/persons')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 'person-1', full_name: 'John', mobile: '+639171111111' }) });
+      }
+      if (url.includes('/api/items/matches')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ matches: [] }) });
+      }
+      if (url.includes('/api/items')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockItem) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     const onItemCreated = vi.fn();
     render(<LogItemForm onItemCreated={onItemCreated} />);
 
     await userEvent.type(screen.getByLabelText(/item name/i), 'Laptop');
     await userEvent.selectOptions(screen.getByLabelText(/category/i), 'Electronics');
+
+    // Fill in contact info (required for lost items)
+    const nameInputs = screen.getAllByLabelText(/full name/i);
+    await userEvent.type(nameInputs[0], 'John');
+    await userEvent.type(screen.getByLabelText(/mobile/i), '+639171111111');
+
     await userEvent.click(screen.getByRole('button', { name: /log item/i }));
 
     await waitFor(() => {
@@ -77,12 +101,29 @@ describe('LogItemForm', () => {
   });
 
   it('handles API error gracefully', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+    // Mock handles multiple fetch calls
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/persons')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 'person-1', full_name: 'John', mobile: '+639171111111' }) });
+      }
+      if (url.includes('/api/items/matches')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ matches: [] }) });
+      }
+      // Item creation fails
+      return Promise.reject(new Error('Network error'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     render(<LogItemForm />);
 
     await userEvent.type(screen.getByLabelText(/item name/i), 'Laptop');
     await userEvent.selectOptions(screen.getByLabelText(/category/i), 'Electronics');
+
+    // Fill in contact info (required for lost items)
+    const nameInputs = screen.getAllByLabelText(/full name/i);
+    await userEvent.type(nameInputs[0], 'John');
+    await userEvent.type(screen.getByLabelText(/mobile/i), '+639171111111');
+
     await userEvent.click(screen.getByRole('button', { name: /log item/i }));
 
     await waitFor(() => {

@@ -101,6 +101,16 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
 
         {/* Item details */}
         <div className="space-y-2">
+          {item.image_data && (
+            <div className="flex justify-center mb-4">
+              <img
+                src={item.image_data}
+                alt={item.item_name}
+                className="max-h-64 w-full rounded-lg border border-gray-700 object-contain"
+              />
+            </div>
+          )}
+
           <div>
             <span className="text-sm text-gray-400">Item Name</span>
             <p className="text-gray-200 font-medium">{item.item_name}</p>
@@ -134,10 +144,9 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
             </span>
           </div>
 
-          {/* Surrenderer details */}
+          {/* Person sections */}
+          {item.reportedByPerson && renderPersonSection('Reported By', item.reportedByPerson)}
           {renderPersonSection('Surrendered By', item.surrenderedByPerson)}
-
-          {/* Claimant details */}
           {renderPersonSection('Claimed By', item.claimedByPerson)}
 
           <div>
@@ -257,6 +266,7 @@ export default function ClaimedItems({ items, loading, error, deptName }: Claime
           <table className="w-full text-sm">
             <thead className="bg-gray-900">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Photo</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Item Name</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Surrenderer</th>
@@ -271,6 +281,13 @@ export default function ClaimedItems({ items, loading, error, deptName }: Claime
                   onClick={() => setSelectedItem(item)}
                   className="cursor-pointer transition-colors hover:bg-gray-800/50"
                 >
+                  <td className="px-4 py-3">
+                    {item.image_data ? (
+                      <img src={item.image_data} alt="" className="h-10 w-10 rounded-lg border border-gray-700 object-cover" />
+                    ) : (
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-600 text-xs">N/A</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-200 font-medium">{item.item_name}</td>
                   <td className="px-4 py-3 text-gray-400">{item.category ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-400">

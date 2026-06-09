@@ -359,6 +359,53 @@ expect 400 "POST /items empty body fails" \
   -H "Content-Type: application/json" \
   -d '{}'
 
+header "2.5b Lost Item with reported_by Contact Info"
+
+	# Create a person to be the reporter
+	REPORTER_RESP=$(curl -sf -X POST "$SEC_URL/api/persons" \
+	  -H "Content-Type: application/json" \
+	  -d "{\"full_name\":\"Lost Reporter\",\"mobile\":\"09171112222\"}")
+	REPORTER_ID=$(echo "$REPORTER_RESP" | grep -o "\"id\":\"[^\"]*\"" | head -1 | cut -d"\"" -f4)
+	if [ -n "$REPORTER_ID" ]; then
+	  pass "Create reporter person — ID: $REPORTER_ID"
+	else
+	  fail "Create reporter person — no ID returned"
+	fi
+
+	# Create a lost item with reported_by
+	LOST_WITH_REPORTER=$(curl -sf -X POST "$SEC_URL/api/items" \
+	  -H "Content-Type: application/json" \
+	  -d "{\"item_name\":\"Lost Watch\",\"description\":\"Silver watch with leather strap\",\"status\":\"lost\",\"reported_by\":\"$REPORTER_ID\"}")
+	LOST_WITH_REPORTER_ID=$(echo "$LOST_WITH_REPORTER" | grep -o "\"id\":\"[^\"]*\"" | head -1 | cut -d"\"" -f4)
+	if [ -n "$LOST_WITH_REPORTER_ID" ]; then
+	  pass "Create lost item with reporter — ID: $LOST_WITH_REPORTER_ID"
+	else
+	  fail "Create lost item with reporter — no ID returned"
+	fi
+
+	expect 400 "POST /items with non-existent reported_by fails" \
+	  -X POST "$SEC_URL/api/items" \
+	  -H "Content-Type: application/json" \
+	  -d "{\"item_name\":\"Bad Reporter Test\",\"status\":\"lost\",\"reported_by\":\"non-existent-id\"}"
+
+header "2.5c Item with image_data"
+
+	# Create a minimal test image (1x1 white pixel JPEG base64)
+	TEST_IMAGE="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpUVEZXR2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fP09fb3+Pn6/8QAHQEAAwEBAQEBAAAAAAAAAAAAAAECAwQFB//EAB0RAQACAgMBAQEAAAAAAAAAAAABAhEhMUFRYRL/2gAMAwEAAhEDEQA/ANX/2Q=="
+
+	IMAGE_ITEM=$(curl -sf -X POST "$SEC_URL/api/items" \
+	  -H "Content-Type: application/json" \
+	  -d "{\"item_name\":\"Photo Item\",\"description\":\"Item with image_data\",\"status\":\"found\",\"image_data\":\"$TEST_IMAGE\"}")
+	IMAGE_ITEM_ID=$(echo "$IMAGE_ITEM" | grep -o "\"id\":\"[^\"]*\"" | head -1 | cut -d"\"" -f4)
+	if [ -n "$IMAGE_ITEM_ID" ]; then
+	  pass "Create item with image_data — ID: $IMAGE_ITEM_ID"
+	  if echo "$IMAGE_ITEM" | grep -q "\"image_data\":\"data:image"; then
+	    pass "image_data field present in create response"
+	  fi
+	else
+	  fail "Create item with image_data — no ID returned"
+	fi
+
 header "2.6 Pending Sync Queue"
 expect_contain "Pending sync count is 0" '"count":0' "$SEC_URL/api/pending"
 

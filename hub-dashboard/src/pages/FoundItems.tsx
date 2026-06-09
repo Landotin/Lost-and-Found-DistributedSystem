@@ -25,6 +25,12 @@ function DetailModal({ item, onClose }: { item: ItemDetail | null; onClose: () =
         </div>
 
         <div className="p-6 space-y-6">
+          {item.image_data && (
+            <div className="flex justify-center">
+              <img src={item.image_data} alt={item.item_name} className="max-h-64 rounded-lg border border-gray-700 object-contain" />
+            </div>
+          )}
+
           <Section title="Basic Information">
             <Field label="Item Name" value={item.item_name} />
             <Field label="Description" value={item.description ?? '—'} />
@@ -37,6 +43,15 @@ function DetailModal({ item, onClose }: { item: ItemDetail | null; onClose: () =
           <Section title="Location">
             <Field label="Found Location" value={item.found_location ?? '—'} />
           </Section>
+
+          {item.reporter_full_name && (
+            <Section title="Reporter (PII)">
+              <Field label="Full Name" value={item.reporter_full_name} />
+              <Field label="Mobile" value={item.reporter_mobile ?? '—'} />
+              <Field label="ID Type" value={item.reporter_id_type ?? '—'} />
+              <Field label="ID Number" value={item.reporter_id_number ?? '—'} />
+            </Section>
+          )}
 
           {item.surrenderer_full_name && (
             <Section title="Surrenderer (PII)">
@@ -182,6 +197,7 @@ function FoundItems() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
+                  <th className="text-left px-6 py-3 text-gray-400 font-medium">Photo</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">ID</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Item</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Department</th>
@@ -193,6 +209,13 @@ function FoundItems() {
               <tbody className="divide-y divide-gray-800">
                 {searched.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-800/50 transition-colors">
+                    <td className="px-6 py-4">
+                      {item.image_data ? (
+                        <img src={item.image_data} alt="" className="h-10 w-10 rounded-lg border border-gray-700 object-cover" />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-600 text-xs">N/A</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-gray-400 font-mono text-xs">{item.id}</td>
                     <td className="px-6 py-4">
                       <div>

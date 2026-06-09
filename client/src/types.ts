@@ -18,14 +18,18 @@ export interface Item {
   status: ItemStatus;
   surrendered_by?: string;
   claimed_by?: string;
+  reported_by?: string;
   claimed_at?: string;
   synced: number;
   updated_at?: string;
   created_at?: string;
+  image_data?: string | null;
   /** Expanded person record for surrendered_by (fetched from /api/items/:id) */
   surrenderedByPerson?: Person;
   /** Expanded person record for claimed_by (fetched from /api/items/:id) */
   claimedByPerson?: Person;
+  /** Expanded person record for reported_by (fetched from /api/items/:id) */
+  reportedByPerson?: Person;
 }
 
 export interface StatusResponse {
@@ -58,4 +62,6 @@ export interface CreateItemPayload {
   category?: string;
   status: 'lost' | 'found';
   surrendered_by?: string;
+  reported_by?: string;
+  image_data?: string;
 }
