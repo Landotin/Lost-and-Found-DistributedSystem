@@ -519,3 +519,95 @@ describe('handleIncomingStatusUpdate', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('getAllItems', () => {
+  let db: Database;
+
+  beforeAll(async () => {
+    cleanup();
+    db = await initDatabase(TEST_DB_PATH);
+  });
+
+  afterAll(async () => {
+    await db.close();
+    cleanup();
+  });
+
+  beforeEach(async () => {
+    await db.run('DELETE FROM items');
+    await db.run('DELETE FROM persons');
+  });
+
+  it('should return items with populated surrenderedByPerson and claimedByPerson', async () => {
+    // Create surrenderer and claimant
+    const surrenderer: Person = {
+      id: 'person-s1',
+      full_name: 'Steve Surrenderer',
+      mobile: '+639171112222',
+      id_type: 'Passport',
+      id_number: 'P1122',
+    };
+    const claimant: Person = {
+      id: 'person-c1',
+      full_name: 'Claire Claimant',
+      mobile: '+639173334444',
+      id_type: 'Driver License',
+      id_number: 'DL-3344',
+    };
+
+    await createPerson(surrenderer);
+    await createPerson(claimant);
+
+    // Create item
+    const item: Item = {
+      id: 'item-joined-1',
+      item_name: 'Joined Wallet',
+      description: 'Found inside classroom',
+      department_origin: 'Security',
+      status: 'claimed',
+      surrendered_by: 'person-s1',
+      claimed_by: 'person-c1',
+      claimed_at: new Date().toISOString(),
+      synced: 0,
+    };
+
+    await createItem(item);
+    // Note: createItem doesn't set claimed_by or claimed_at in its SQL, let's update it or write directly
+    await db.run(
+      `UPDATE items SET claimed_by = ?, claimed_at = ? WHERE id = ?`,
+      ['person-c1', item.claimed_at, 'item-joined-1']
+    );
+
+    const items = await getAllItems();
+    expect(items.length).toBe(1);
+
+    const first = items[0];
+    expect(first.id).toBe('item-joined-1');
+    expect(first.surrendered_by).toBe('person-s1');
+    expect(first.claimed_by).toBe('person-c1');
+
+    expect(first.surrenderedByPerson).toBeDefined();
+    expect(first.surrenderedByPerson!.full_name).toBe('Steve Surrenderer');
+    expect(first.surrenderedByPerson!.mobile).toBe('+639171112222');
+
+    expect(first.claimedByPerson).toBeDefined();
+    expect(first.claimedByPerson!.full_name).toBe('Claire Claimant');
+    expect(first.claimedByPerson!.mobile).toBe('+639173334444');
+  });
+
+  it('should return null for person fields if there are no linked surrenderer or claimant', async () => {
+    const item: Item = {
+      id: 'item-no-person-1',
+      item_name: 'Orphaned Item',
+      department_origin: 'Security',
+      status: 'lost',
+      synced: 0,
+    };
+    await createItem(item);
+
+    const items = await getAllItems();
+    expect(items.length).toBe(1);
+    expect(items[0].surrenderedByPerson).toBeNull();
+    expect(items[0].claimedByPerson).toBeNull();
+  });
+});

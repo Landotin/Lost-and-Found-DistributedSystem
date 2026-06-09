@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
 import type { Item } from '../types';
 
-interface GlobalLedgerProps {
+interface FoundItemsProps {
   items: Item[] | null;
   loading: boolean;
   error: string | null;
@@ -70,7 +70,7 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
             <p className="text-sm text-gray-400">{person.mobile ?? '—'}</p>
             {person.id_type && (
               <p className="text-sm text-gray-400">
-                {person.id_type}: {isOwnDepartment ? (person.id_number ?? '—') : '[REDACTED]'}
+                {person.id_type}: {person.id_number ?? '—'}
               </p>
             )}
           </>
@@ -91,7 +91,7 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
       <div className="mx-4 w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-100">Item Details</h2>
+          <h2 className="text-lg font-semibold text-gray-100">Found Item Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -136,6 +136,11 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
             </span>
           </div>
 
+          {/* Surrenderer details */}
+          {renderPersonSection('Surrendered By', item.surrenderedByPerson)}
+
+          {item.claimedByPerson && renderPersonSection('Claimed By', item.claimedByPerson)}
+
           <div>
             <span className="text-sm text-gray-400">Date Logged</span>
             <p className="text-gray-200">{formatDateTime(item.created_at)}</p>
@@ -148,24 +153,12 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
             </div>
           )}
 
-          {/* Surrenderer details */}
-          {(item.status === 'found' || item.status === 'claimed') &&
-            renderPersonSection('Surrendered By', item.surrenderedByPerson)}
-
-          {/* Claimed by details */}
-          {item.status === 'claimed' &&
-            renderPersonSection('Claimed By', item.claimedByPerson)}
-
-          {/* Process Claim button (only for found items) */}
-          {item.status === 'found' && onProcessClaim && (
-            <div className="border-t border-gray-700 pt-4 mt-4">
+          {/* Process Claim button */}
+          {onProcessClaim && (
+            <div className="pt-4 border-t border-gray-700">
               <button
-                type="button"
-                onClick={() => {
-                  onProcessClaim(item.id);
-                  onClose();
-                }}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                onClick={() => onProcessClaim(item.id)}
+                className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
               >
                 Process Claim
               </button>
@@ -177,34 +170,26 @@ function DetailModal({ item, deptName, onClose, onProcessClaim }: DetailModalPro
   );
 }
 
-export default function GlobalLedger({ items, loading, error, deptName, onProcessClaim }: GlobalLedgerProps) {
+export default function FoundItems({ items, loading, error, deptName, onProcessClaim }: FoundItemsProps) {
   const [search, setSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
-  // Extract unique departments from items
-  const departments = useMemo(() => {
+  // Filter to only found items from this department
+  const foundItems = useMemo(() => {
     if (!items) return [];
-    const depts = new Set(items.map((i) => i.department_origin));
-    return Array.from(depts).sort();
-  }, [items]);
+    return items.filter((item) => item.status === 'found' && item.department_origin === deptName);
+  }, [items, deptName]);
 
-  // Filter items based on search and department
+  // Further filter by search (matches item name or surrenderer name)
   const filteredItems = useMemo(() => {
-    if (!items) return [];
-    return items.filter((item) => {
-      // Search filter (case-insensitive on item_name)
-      if (search) {
-        const q = search.toLowerCase();
-        if (!item.item_name.toLowerCase().includes(q)) return false;
-      }
-
-      // Department filter
-      if (deptFilter !== 'all' && item.department_origin !== deptFilter) return false;
-
-      return true;
+    if (!search) return foundItems;
+    const q = search.toLowerCase();
+    return foundItems.filter((item) => {
+      if (item.item_name.toLowerCase().includes(q)) return true;
+      if (item.surrenderedByPerson?.full_name?.toLowerCase().includes(q)) return true;
+      return false;
     });
-  }, [items, search, deptFilter]);
+  }, [foundItems, search]);
 
   // Loading state
   if (loading && !items) {
@@ -212,7 +197,7 @@ export default function GlobalLedger({ items, loading, error, deptName, onProces
       <div className="flex items-center justify-center py-12">
         <div className="flex items-center gap-3 text-gray-400">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-500 border-t-blue-500" />
-          <span>Loading items...</span>
+          <span>Loading found items...</span>
         </div>
       </div>
     );
@@ -228,88 +213,81 @@ export default function GlobalLedger({ items, loading, error, deptName, onProces
     );
   }
 
-  // Empty state
+  // Empty state — no items at all
   if (!items || items.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
         <p className="text-lg">📦 No items found</p>
-        <p className="text-sm mt-1">Items logged across departments will appear here.</p>
+        <p className="text-sm mt-1">Items logged in this department will appear here.</p>
+      </div>
+    );
+  }
+
+  // Empty state — items exist but none found
+  if (foundItems.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <p className="text-lg">🔍 No found items yet</p>
+        <p className="text-sm mt-1">Found items from this department will appear here once logged.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* Search and Filters */}
+      {/* Search */}
       <div className="flex flex-wrap gap-3">
-        {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
-            placeholder="Search items..."
+            placeholder="Search by item name or surrenderer..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-9 pr-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
-
-        {/* Department filter */}
-        <div>
-          <label htmlFor="dept-filter" className="sr-only">Department filter</label>
-          <select
-            id="dept-filter"
-            aria-label="Department filter"
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-            className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="all">All Departments</option>
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>{dept}</option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Summary */}
       <p className="text-sm text-gray-400">
-        Showing {filteredItems.length} of {items.length} {items.length === 1 ? 'item' : 'items'}
+        Showing {filteredItems.length} of {foundItems.length} found {foundItems.length === 1 ? 'item' : 'items'}
       </p>
 
-      {/* Card-style rows */}
+      {/* Table */}
       {filteredItems.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          <p>No items match your filters.</p>
+          <p className="text-lg">No matching found items</p>
+          <p className="text-sm mt-1">Try adjusting your search terms.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredItems.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => setSelectedItem(item)}
-              className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/50 px-5 py-4 cursor-pointer transition-colors hover:bg-gray-800/50"
-            >
-              {/* Left column: Item Name + Category */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-200 truncate">{item.item_name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{item.category ?? '—'}</p>
-              </div>
-
-              {/* Right column: Status badge + Department + Date */}
-              <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                <span
-                  className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                    STATUS_COLORS[item.status as ItemStatus] ?? 'bg-gray-700 text-gray-300'
-                  }`}
+        <div className="overflow-x-auto rounded-lg border border-gray-800">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-900">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Item Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Category</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Surrenderer</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date Logged</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800">
+              {filteredItems.map((item) => (
+                <tr
+                  key={item.id}
+                  onClick={() => setSelectedItem(item)}
+                  className="cursor-pointer transition-colors hover:bg-gray-800/50"
                 >
-                  {item.status}
-                </span>
-                <span className="text-xs text-gray-500 hidden sm:inline">{item.department_origin}</span>
-                <span className="text-xs text-gray-600 hidden md:inline">{formatDate(item.created_at)}</span>
-              </div>
-            </div>
-          ))}
+                  <td className="px-4 py-3 text-gray-200 font-medium">{item.item_name}</td>
+                  <td className="px-4 py-3 text-gray-400">{item.category ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-400">
+                    {item.surrenderedByPerson?.full_name ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400">{formatDate(item.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

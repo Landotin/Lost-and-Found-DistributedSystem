@@ -4,12 +4,17 @@ import LogItemForm from './components/LogItemForm';
 import PendingSync from './components/PendingSync';
 import GlobalLedger from './components/GlobalLedger';
 import ProcessClaim from './components/ProcessClaim';
+import ClaimedItems from './components/ClaimedItems';
+import LostItems from './components/LostItems';
+import FoundItems from './components/FoundItems';
 import { usePolling } from './hooks/usePolling';
 import { fetchStatus, fetchPendingSync, fetchItems } from './hooks/useApi';
 import type { StatusResponse, PendingSyncResponse, Item } from './types';
 
+type Tab = 'ledger' | 'lost-items' | 'found-items' | 'claimed-items' | 'log' | 'claim' | 'pending';
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'ledger' | 'log' | 'pending' | 'claim'>('ledger');
+  const [activeTab, setActiveTab] = useState<Tab>('ledger');
   const [processClaimItemId, setProcessClaimItemId] = useState<string | null>(null);
 
   // Lifted polling state to prevent duplicate HTTP requests
@@ -19,7 +24,7 @@ export default function App() {
 
   const deptName = statusData?.deptName || import.meta.env.VITE_DEPT_NAME || 'Department Node';
 
-  const getTabClassName = (tab: 'ledger' | 'log' | 'pending' | 'claim') =>
+  const getTabClassName = (tab: Tab) =>
     `px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
       activeTab === tab
         ? 'border-b-2 border-blue-500 text-blue-400'
@@ -56,6 +61,30 @@ export default function App() {
         </button>
         <button
           role="tab"
+          aria-selected={activeTab === 'lost-items'}
+          onClick={() => setActiveTab('lost-items')}
+          className={getTabClassName('lost-items')}
+        >
+          Lost Items
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'found-items'}
+          onClick={() => setActiveTab('found-items')}
+          className={getTabClassName('found-items')}
+        >
+          Found Items
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'claimed-items'}
+          onClick={() => setActiveTab('claimed-items')}
+          className={getTabClassName('claimed-items')}
+        >
+          Claimed Items
+        </button>
+        <button
+          role="tab"
           aria-selected={activeTab === 'log'}
           onClick={() => setActiveTab('log')}
           className={getTabClassName('log')}
@@ -64,19 +93,19 @@ export default function App() {
         </button>
         <button
           role="tab"
-          aria-selected={activeTab === 'pending'}
-          onClick={() => setActiveTab('pending')}
-          className={getTabClassName('pending')}
-        >
-          Pending Sync
-        </button>
-        <button
-          role="tab"
           aria-selected={activeTab === 'claim'}
           onClick={() => { setActiveTab('claim'); setProcessClaimItemId(null); }}
           className={getTabClassName('claim')}
         >
           Process Claim
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'pending'}
+          onClick={() => setActiveTab('pending')}
+          className={getTabClassName('pending')}
+        >
+          Pending Sync
         </button>
       </nav>
 
@@ -92,6 +121,31 @@ export default function App() {
               setProcessClaimItemId(itemId);
               setActiveTab('claim');
             }}
+          />
+        ) : activeTab === 'lost-items' ? (
+          <LostItems
+            items={items}
+            loading={itemsLoading}
+            error={itemsError}
+            deptName={deptName}
+          />
+        ) : activeTab === 'found-items' ? (
+          <FoundItems
+            items={items}
+            loading={itemsLoading}
+            error={itemsError}
+            deptName={deptName}
+            onProcessClaim={(itemId) => {
+              setProcessClaimItemId(itemId);
+              setActiveTab('claim');
+            }}
+          />
+        ) : activeTab === 'claimed-items' ? (
+          <ClaimedItems
+            items={items}
+            loading={itemsLoading}
+            error={itemsError}
+            deptName={deptName}
           />
         ) : activeTab === 'log' ? (
           <LogItemForm />

@@ -31,6 +31,8 @@ export interface Item {
   synced: number;       // 0 = pending sync, 1 = synced to hub
   updated_at?: string;
   created_at?: string;
+  surrenderedByPerson?: Person | null;
+  claimedByPerson?: Person | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +218,65 @@ export async function createItem(item: Item): Promise<void> {
 }
 
 export async function getAllItems(): Promise<Item[]> {
-  return db.all<Item[]>('SELECT * FROM items ORDER BY created_at DESC');
+  const rows = await db.all<any[]>(`
+    SELECT 
+      i.*,
+      s.full_name AS s_full_name,
+      s.mobile AS s_mobile,
+      s.id_type AS s_id_type,
+      s.id_number AS s_id_number,
+      c.full_name AS c_full_name,
+      c.mobile AS c_mobile,
+      c.id_type AS c_id_type,
+      c.id_number AS c_id_number
+    FROM items i
+    LEFT JOIN persons s ON i.surrendered_by = s.id
+    LEFT JOIN persons c ON i.claimed_by = c.id
+    ORDER BY i.created_at DESC
+  `);
+
+  return rows.map((row) => {
+    const item: Item = {
+      id: row.id,
+      item_name: row.item_name,
+      description: row.description,
+      category: row.category,
+      department_origin: row.department_origin,
+      status: row.status,
+      surrendered_by: row.surrendered_by,
+      claimed_by: row.claimed_by,
+      claimed_at: row.claimed_at,
+      synced: row.synced,
+      updated_at: row.updated_at,
+      created_at: row.created_at,
+    };
+
+    if (row.surrendered_by) {
+      item.surrenderedByPerson = {
+        id: row.surrendered_by,
+        full_name: row.s_full_name,
+        mobile: row.s_mobile,
+        id_type: row.s_id_type ?? undefined,
+        id_number: row.s_id_number ?? undefined,
+      };
+    } else {
+      item.surrenderedByPerson = null;
+    }
+
+    if (row.claimed_by) {
+      item.claimedByPerson = {
+        id: row.claimed_by,
+        full_name: row.c_full_name,
+        mobile: row.c_mobile,
+        id_type: row.c_id_type ?? undefined,
+        id_number: row.c_id_number ?? undefined,
+      };
+    } else {
+      item.claimedByPerson = null;
+    }
+
+    return item;
+  });
 }
 
 export async function getItemById(id: string): Promise<Item | undefined> {

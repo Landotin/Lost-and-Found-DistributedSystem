@@ -53,18 +53,55 @@ describe('App Component', () => {
     expect(screen.getByRole('heading', { name: /Lost & Found Tracker/i })).toBeInTheDocument();
   });
 
-  it('renders tab navigation with four tabs', () => {
+  it('renders tab navigation with seven tabs', () => {
     render(<App />);
     expect(screen.getByRole('tab', { name: /global ledger/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /lost items/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /found items/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /claimed items/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /log item/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /pending sync/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /process claim/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /pending sync/i })).toBeInTheDocument();
   });
 
   it('defaults to Global Ledger tab (aria-selected="true")', () => {
     render(<App />);
     const ledgerTab = screen.getByRole('tab', { name: /global ledger/i });
     expect(ledgerTab).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('switches to Lost Items tab when clicked', async () => {
+    render(<App />);
+
+    const lostTab = screen.getByRole('tab', { name: /lost items/i });
+    await userEvent.click(lostTab);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No items found/i)).toBeInTheDocument();
+    });
+  });
+
+  it('switches to Found Items tab when clicked', async () => {
+    render(<App />);
+
+    const foundTab = screen.getByRole('tab', { name: /found items/i });
+    await userEvent.click(foundTab);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No items found/i)).toBeInTheDocument();
+    });
+  });
+
+  it('switches to Claimed Items tab when clicked', async () => {
+    render(<App />);
+
+    const claimedTab = screen.getByRole('tab', { name: /claimed items/i });
+    await userEvent.click(claimedTab);
+
+    // Since items mock returns empty array, ClaimedItems shows "no items" state
+    await waitFor(() => {
+      expect(screen.getByText(/No items found/i)).toBeInTheDocument();
+    });
   });
 
   it('switches to Process Claim tab when clicked', async () => {

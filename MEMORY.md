@@ -6,13 +6,15 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 0. Active Session Status
 
-*   **Task Compile**: Completed edge case scenario testing and resolved test suite integration issues. Isolated SQLite databases for each department node using unique DB_PATH values, updated PII prefix matching for normalized Philippine mobile numbers, and refined process-killing logic during offline tests to only terminate listening sockets. All 90 global integration tests pass successfully.
+*   **Task Compile**: Migrated status filters from Global Ledger dropdown into individual navigation tabs (Lost Items, Found Items). Created new LostItems and FoundItems components with per-department filtering, search, detail modals, and PII redaction. Converted Global Ledger to card-style rows with status badges. Added 29 new tests; all 191 frontend tests passing.
 *   **Current Task**: None.
 *   **Completed Tasks**:
-    *   `[x]` Edge Case: Isolated SQLite databases for Security and Engineering nodes to prevent shared database collisions.
-    *   `[x]` Edge Case: Corrected E.9 cross-department PII test to match normalized E.164 phone formats (`+639...`).
-    *   `[x]` Edge Case: Fixed E.10 stop hub logic to use `lsof -ti:<port> -sTCP:LISTEN` to avoid accidentally killing connected node client processes.
-    *   `[x]` Registry: Marked ERR-013 (claimed_by validation constraint) and ERR-014 (heartbeat interval timeout) as resolved in the Error Registry.
+    *   `[x]` Created LostItems component with per-department lost-item view, search, and detail modal
+    *   `[x]` Created FoundItems component with per-department found-item view, Process Claim button, search, and detail modal
+    *   `[x]` Removed status filter dropdown from GlobalLedger; converted table to card-style rows
+    *   `[x]` Added Lost Items and Found Items navigation tabs; reordered tabs (status tabs grouped first)
+    *   `[x]` Added 29 tests (11 LostItems + 18 FoundItems); updated GlobalLedger and App tests
+    *   `[x]` All 191 frontend tests passing across 15 test files
 *   **Pending Tasks**: None.
 
 ---
@@ -450,6 +452,23 @@ This file tracks the historical context, architectural decisions, completed mile
     - `README.md` — Comprehensive project setup, E2E test documentation, and horizontal scaling guide
 *   **Files modified**:
     - `server/src/index.ts` — Added route mapping for `/api/health`
+
+### Session: 2026-06-09 (Status Filter Migration — Individual Navigation Tabs)
+*   **Scope**: Migrated status filters (Lost/Found/Claimed) from Global Ledger dropdown into dedicated navigation tabs with per-department item views.
+*   **Problem**: The Global Ledger contained a status filter dropdown mixing all statuses in one view. Users wanted dedicated tabs for each status, a cleaner Global Ledger with card-style rows, and per-department filtering for status-specific tabs.
+*   **Decision**: Removed the status filter from GlobalLedger and created separate LostItems and FoundItems components (matching the existing ClaimedItems pattern). GlobalLedger now shows all items in card-style rows with prominent status badges.
+*   **Files created**:
+    - `client/src/components/LostItems.tsx` — Lost items view with search, table, detail modal, PII redaction
+    - `client/src/components/FoundItems.tsx` — Found items view with Process Claim button, search, detail modal
+    - `client/src/components/__tests__/LostItems.test.tsx` — 11 tests
+    - `client/src/components/__tests__/FoundItems.test.tsx` — 18 tests
+*   **Files modified**:
+    - `client/src/components/GlobalLedger.tsx` — Removed status filter, card-style row layout
+    - `client/src/App.tsx` — Added Lost Items / Found Items tabs, reordered (status tabs grouped first)
+    - `client/src/components/__tests__/GlobalLedger.test.tsx` — Removed status filter tests, added card layout tests
+    - `client/src/App.test.tsx` — Updated for 7 tabs, added Lost/Found tab switching tests
+    - `MEMORY.md` — this entry
+*   **Test Results**: 191/191 ALL TESTS PASSED (15 test files).
     - `Context/ERROR.md` — Added `ERR-015` entry
     - `MEMORY.md` — this entry
 

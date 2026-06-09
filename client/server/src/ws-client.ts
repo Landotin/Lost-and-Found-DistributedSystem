@@ -261,12 +261,16 @@ export class WsClientManager extends EventEmitter {
     const pending = await getPendingSyncItems();
     if (pending.length === 0) return;
 
-    // For each pending item, fetch the full surrenderer person details
+    // For each pending item, fetch the full surrenderer and claimant person details
     const batch = await Promise.all(
       pending.map(async (item) => {
         let surrenderedByPerson = null;
         if (item.surrendered_by) {
           surrenderedByPerson = await getPersonById(item.surrendered_by);
+        }
+        let claimedByPerson = null;
+        if (item.claimed_by) {
+          claimedByPerson = await getPersonById(item.claimed_by);
         }
         return {
           id: item.id,
@@ -276,6 +280,9 @@ export class WsClientManager extends EventEmitter {
           department_origin: item.department_origin,
           status: item.status,
           surrendered_by: surrenderedByPerson, // full person object or null
+          claimed_by: claimedByPerson,         // full person object or null
+          claimed_at: item.claimed_at,
+          updated_at: item.updated_at,
           created_at: item.created_at,
         };
       })

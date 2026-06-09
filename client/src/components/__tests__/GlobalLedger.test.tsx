@@ -107,7 +107,7 @@ describe('GlobalLedger', () => {
       expect(screen.getByText('Phone')).toBeInTheDocument();
     });
 
-    it('renders table headers', () => {
+    it('renders all items in card-style rows', () => {
       render(
         <GlobalLedger
           items={mockItems}
@@ -117,13 +117,13 @@ describe('GlobalLedger', () => {
         />
       );
 
-      expect(screen.getByText(/Item Name/)).toBeInTheDocument();
-      expect(screen.getByText(/Category/)).toBeInTheDocument();
-      expect(screen.getByText(/Origin Department/)).toBeInTheDocument();
-      // Use getAllByText for "Status" since it appears in both the table header and the sr-only label
-      const statusHeaders = screen.getAllByText(/Status/);
-      expect(statusHeaders.length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/Date Logged/)).toBeInTheDocument();
+      // Each item name should appear once (no table headers like before)
+      expect(screen.getByText('Laptop')).toBeInTheDocument();
+      expect(screen.getByText('Wallet')).toBeInTheDocument();
+      expect(screen.getByText('Phone')).toBeInTheDocument();
+
+      // Category text should appear per item
+      expect(screen.getByText('Accessories')).toBeInTheDocument();
     });
 
     it('renders status badges with appropriate styling', () => {
@@ -136,9 +136,44 @@ describe('GlobalLedger', () => {
         />
       );
 
+      // Status badges should still render in card rows
       const lostBadge = screen.getByText('lost');
       expect(lostBadge).toBeInTheDocument();
       expect(lostBadge.tagName).toBe('SPAN');
+
+      const claimedBadge = screen.getByText('claimed');
+      expect(claimedBadge).toBeInTheDocument();
+      expect(claimedBadge.tagName).toBe('SPAN');
+    });
+
+    it('shows summary text with total item count', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="Test Dept"
+        />
+      );
+
+      expect(screen.getByText(/Showing 3 of 3 items/i)).toBeInTheDocument();
+    });
+
+    it('shows department origin in each card', () => {
+      render(
+        <GlobalLedger
+          items={mockItems}
+          loading={false}
+          error={null}
+          deptName="Test Dept"
+        />
+      );
+
+      // Department tags should be visible (appear in both filter dropdown and cards)
+      const ccsElements = screen.getAllByText('CCS');
+      expect(ccsElements.length).toBeGreaterThanOrEqual(2);
+      const coeElements = screen.getAllByText('COE');
+      expect(coeElements.length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows empty state when items array is empty', () => {
@@ -188,44 +223,6 @@ describe('GlobalLedger', () => {
       fireEvent.change(searchInput, { target: { value: 'zzzzz' } });
 
       expect(screen.getByText(/no items/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('status filter', () => {
-    it('filters items by status', () => {
-      render(
-        <GlobalLedger
-          items={mockItems}
-          loading={false}
-          error={null}
-          deptName="Test Dept"
-        />
-      );
-
-      const statusSelect = screen.getByLabelText(/status filter/i);
-      fireEvent.change(statusSelect, { target: { value: 'found' } });
-
-      expect(screen.getByText('Wallet')).toBeInTheDocument();
-      expect(screen.queryByText('Laptop')).not.toBeInTheDocument();
-      expect(screen.queryByText('Phone')).not.toBeInTheDocument();
-    });
-
-    it('shows all items when "All" status is selected', () => {
-      render(
-        <GlobalLedger
-          items={mockItems}
-          loading={false}
-          error={null}
-          deptName="Test Dept"
-        />
-      );
-
-      const statusSelect = screen.getByLabelText(/status filter/i);
-      fireEvent.change(statusSelect, { target: { value: 'all' } });
-
-      expect(screen.getByText('Laptop')).toBeInTheDocument();
-      expect(screen.getByText('Wallet')).toBeInTheDocument();
-      expect(screen.getByText('Phone')).toBeInTheDocument();
     });
   });
 

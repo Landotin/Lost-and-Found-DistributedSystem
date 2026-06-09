@@ -115,7 +115,11 @@ export function createApiRouter(
       if (item.surrendered_by) {
         surrenderedByPerson = await getPersonById(item.surrendered_by);
       }
-      res.json({ ...item, surrenderedByPerson });
+      let claimedByPerson: Person | undefined;
+      if (item.claimed_by) {
+        claimedByPerson = await getPersonById(item.claimed_by);
+      }
+      res.json({ ...item, surrenderedByPerson, claimedByPerson });
     } catch (err) {
       console.error('[API] Error fetching item:', err);
       res.status(500).json({ error: 'Failed to fetch item' });
