@@ -164,3 +164,16 @@ Below are known high-risk failure modes anticipated during development:
 *   **Status**: Resolved
 *   **Date**: 2026-06-09
 
+
+### ERR-017: TypeScript Build Error — Dead Comparison in Narrowed JSX Block (LostItems.tsx)
+*   **Component**: Client (Frontend)
+*   **Symptom**: `npx tsc -b` fails with:
+    ```
+    error TS2367: This comparison appears to be unintentional because the types '"idle"' and '"submitting"' have no overlap.
+    ```
+    Affected lines: `disabled={markFoundStatus === 'submitting'}` and display text ternary in LostItems.tsx:265-268.
+*   **Root Cause**: The submit button JSX was nested inside a `{showMarkFound && markFoundStatus === 'idle' && (...)}` render block. TypeScript narrowed `markFoundStatus` to the literal type `'idle'` inside that block. Comparing it to `'submitting'` became a provably-false comparison because the union member was already excluded.
+*   **Resolution**: Changed the outer condition from `markFoundStatus === 'idle'` to `markFoundStatus !== 'success'` so the union type is not narrowed. Added `disabled` to form inputs during submission. Error state now renders inline within the same block.
+*   **Prevention**: Never nest a state-dependent check inside a JSX conditional that narrows that state variable. Use `!==` exclusion instead of `===` matching when the block needs to handle multiple states.
+*   **Status**: Resolved
+*   **Date**: 2026-06-09

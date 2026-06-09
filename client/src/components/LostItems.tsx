@@ -206,8 +206,8 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
           </button>
         )}
 
-        {/* Surrenderer form */}
-        {showMarkFound && markFoundStatus === 'idle' && (
+        {/* Surrenderer form (visible during idle, submitting, or error for retry) */}
+        {showMarkFound && (markFoundStatus !== 'success') && (
           <div className="mt-4 border-t border-gray-700 pt-4">
             <h4 className="text-sm font-semibold text-gray-300 mb-3">Who found this item?</h4>
 
@@ -217,7 +217,8 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
                 <input
                   value={surrendererName}
                   onChange={(e) => setSurrendererName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  disabled={markFoundStatus === 'submitting'}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
                   placeholder="Finder's full name"
                 />
                 {formErrors.name && <p className="text-xs text-red-400 mt-1">{formErrors.name}</p>}
@@ -228,7 +229,8 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
                 <input
                   value={surrendererMobile}
                   onChange={(e) => setSurrendererMobile(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  disabled={markFoundStatus === 'submitting'}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
                   placeholder="+639XXXXXXXXX or 09XXXXXXXXX"
                 />
                 {formErrors.mobile && <p className="text-xs text-red-400 mt-1">{formErrors.mobile}</p>}
@@ -239,7 +241,8 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
                 <select
                   value={surrendererIdType}
                   onChange={(e) => setSurrendererIdType(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                  disabled={markFoundStatus === 'submitting'}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none disabled:opacity-50"
                 >
                   <option value="">None</option>
                   <option value="Student ID">Student ID</option>
@@ -253,7 +256,8 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
                 <input
                   value={surrendererIdNumber}
                   onChange={(e) => setSurrendererIdNumber(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  disabled={markFoundStatus === 'submitting'}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
                   placeholder="Optional"
                 />
               </div>
@@ -269,11 +273,17 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
               </button>
               <button
                 onClick={() => { resetMarkFoundForm(); }}
-                className="rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-gray-200 hover:bg-gray-600 transition-colors"
+                disabled={markFoundStatus === 'submitting'}
+                className="rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-gray-200 hover:bg-gray-600 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
             </div>
+
+            {/* Error state inline */}
+            {markFoundStatus === 'error' && markFoundError && (
+              <p className="mt-3 text-sm text-red-400">{markFoundError}</p>
+            )}
           </div>
         )}
 
@@ -281,19 +291,6 @@ function DetailModal({ item, deptName, onClose }: DetailModalProps) {
         {markFoundStatus === 'success' && (
           <div className="mt-4 rounded-lg bg-green-900/40 border border-green-700 p-3 text-green-300 text-sm text-center">
             ✓ Item marked as found!
-          </div>
-        )}
-
-        {/* Error state */}
-        {markFoundStatus === 'error' && (
-          <div className="mt-4 rounded-lg bg-red-900/40 border border-red-700 p-3">
-            <p className="text-red-300 text-sm mb-2">{markFoundError || 'Failed to mark item as found.'}</p>
-            <button
-              onClick={handleMarkFoundSubmit}
-              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition-colors"
-            >
-              Try Again
-            </button>
           </div>
         )}
       </div>
