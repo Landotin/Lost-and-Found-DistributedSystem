@@ -31,12 +31,12 @@ chmod +x start_local.sh
 *   Builds the Department Node React frontend.
 *   Concurrently starts:
     *   **Central Hub** on `http://localhost:5000`
-    *   **Security Node (Dept A)** on `http://localhost:3001`
+    *   **College of Computer Studies Node (Dept A)** on `http://localhost:3001`
     *   **Engineering Node (Dept B)** on `http://localhost:3002`
     *   **Hub Admin Dashboard** on `http://localhost:5005`
 *   Cleans up all background processes automatically when you press `Ctrl+C`.
 
-Logs are written to: `hub.log`, `security.log`, `engineering.log`, and `dashboard.log` in the root directory.
+Logs are written to: `hub.log`, `ccs.log`, `engineering.log`, and `dashboard.log` in the root directory.
 
 ### 2. Run via Docker Compose (Alternative)
 
@@ -85,10 +85,10 @@ Run the Central Hub server and the Admin Dashboard.
 
 #### 2. On Laptop B (Department Nodes)
 Point the node backends to Laptop A's IP address:
-*   **Security Node (Port 3001)**:
+*   **College of Computer Studies Node (Port 3001)**:
     ```bash
     cd client/server
-    PORT=3001 DEPT_NAME="Security" DEPT_SECRET=e2e-test-secret SERVER_WS_URL=ws://192.168.1.100:5000 NODE_ENV=production DB_PATH=../../data/security.db npx tsx src/index.ts
+    PORT=3001 DEPT_NAME="College of Computer Studies" DEPT_SECRET=e2e-test-secret SERVER_WS_URL=ws://192.168.1.100:5000 NODE_ENV=production DB_PATH=../../data/ccs.db npx tsx src/index.ts
     ```
 *   **Engineering Node (Port 3002)** (Open another terminal):
     ```bash
@@ -119,7 +119,7 @@ SERVER_WS_URL="ws://192.168.1.100:5000" \
 ADMIN_SECRET="e2e-test-secret" \
 sudo -E docker compose up --build -d --no-deps dept_ccs dept_coe
 ```
-*   **Security Node**: Accessible at `http://localhost:5001` on Laptop B.
+*   **College of Computer Studies Node**: Accessible at `http://localhost:5001` on Laptop B.
 *   **Engineering Node**: Accessible at `http://localhost:5002` on Laptop B.
 
 

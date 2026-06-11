@@ -25,10 +25,10 @@ export default function App() {
   const deptName = statusData?.deptName || import.meta.env.VITE_DEPT_NAME || 'Department Node';
 
   const getTabClassName = (tab: Tab) =>
-    `px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
+    `shrink-0 px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
       activeTab === tab
-        ? 'border-b-2 border-blue-500 text-blue-400'
-        : 'text-gray-400 hover:text-gray-200'
+        ? 'border-b-2 border-blue-500 text-gray-100'
+        : 'text-gray-500 hover:text-gray-100'
     }`;
 
   return (
@@ -50,7 +50,7 @@ export default function App() {
       </header>
 
       {/* Tab navigation */}
-      <nav className="flex border-b border-gray-800 px-6" role="tablist">
+      <nav className="flex overflow-x-auto border-b border-gray-800 px-6" role="tablist">
         <button
           role="tab"
           aria-selected={activeTab === 'ledger'}

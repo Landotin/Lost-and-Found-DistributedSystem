@@ -2,7 +2,7 @@
 # ==============================================================================
 # RDLFT — Local Dev Server Runner (Non-Docker)
 # ==============================================================================
-# This script starts the Central Hub, Security Node, Engineering Node, and the
+# This script starts the Central Hub, College of Computer Studies Node, Engineering Node, and the
 # Hub Admin Dashboard locally.
 # It automatically builds the frontend assets and cleans up port conflicts.
 #
@@ -84,15 +84,15 @@ DB_PATH="$DATA_DIR/hub.db" \
   npx tsx server/src/index.ts > hub.log 2>&1 &
 sleep 2
 
-# 2. Security Node
-echo "Starting Security Node on port $SEC_PORT..."
+# 2. College of Computer Studies Node
+echo "Starting College of Computer Studies Node on port $SEC_PORT..."
 PORT="$SEC_PORT" \
-DEPT_NAME="Security" \
+DEPT_NAME="College of Computer Studies" \
 DEPT_SECRET="$ADMIN_SECRET" \
 SERVER_WS_URL="ws://localhost:$HUB_PORT" \
 NODE_ENV=production \
-DB_PATH="$DATA_DIR/security.db" \
-  npx tsx client/server/src/index.ts > security.log 2>&1 &
+DB_PATH="$DATA_DIR/ccs.db" \
+  npx tsx client/server/src/index.ts > ccs.log 2>&1 &
 
 # 3. Engineering Node
 echo "Starting Engineering Node on port $ENG_PORT..."
@@ -117,11 +117,11 @@ sleep 3
 info "RDLFT Services are running!"
 echo "--------------------------------------------------------"
 echo "  Central Hub Server:       http://localhost:$HUB_PORT"
-echo "  Security Node (Dept A):   http://localhost:$SEC_PORT"
+echo "  CCS Node (Dept A):         http://localhost:$SEC_PORT"
 echo "  Engineering Node (Dept B): http://localhost:$ENG_PORT"
 echo "  Hub Admin Dashboard:      http://localhost:$DASHBOARD_PORT"
 echo "--------------------------------------------------------"
-echo "Logs are written to: hub.log, security.log, engineering.log, dashboard.log"
+echo "Logs are written to: hub.log, ccs.log, engineering.log, dashboard.log"
 echo "Press [Ctrl+C] to stop all servers gracefully."
 echo ""
 

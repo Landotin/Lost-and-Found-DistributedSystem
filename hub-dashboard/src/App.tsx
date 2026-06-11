@@ -20,9 +20,9 @@ const navItems = [
 
 function App() {
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100">
+    <div className="flex min-h-screen flex-col bg-gray-950 text-gray-100 md:h-screen md:flex-row">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+      <aside className="flex shrink-0 flex-col border-b border-gray-800 bg-gray-900 md:w-64 md:border-b-0 md:border-r">
         {/* Logo / Brand */}
         <div className="h-16 flex items-center gap-3 px-6 border-b border-gray-800">
           <Wifi className="w-6 h-6 text-blue-400" />
@@ -30,13 +30,13 @@ function App() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex gap-1 overflow-x-auto px-3 py-3 md:flex-1 md:flex-col md:space-y-1 md:overflow-visible md:py-4">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                `flex shrink-0 items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
@@ -50,7 +50,7 @@ function App() {
         </nav>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-800 text-xs text-gray-500">
+        <div className="hidden px-6 py-4 border-t border-gray-800 text-xs text-gray-500 md:block">
           Hub Dashboard v1.0
         </div>
       </aside>

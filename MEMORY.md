@@ -152,6 +152,30 @@ This file tracks the historical context, architectural decisions, completed mile
 
 ## 4. Session Logs
 
+### Session: 2026-06-12 (Minimal Black-and-White UI Refresh)
+*   **Scope**: Updated the visual design of both the Department Node UI and Hub Admin Dashboard to a clean, minimalist black-and-white interface while preserving existing layouts, routes, API behavior, WebSocket behavior, database logic, and feature flows.
+*   **Design Updates**:
+    - Added shared Tailwind theme overrides in both frontend CSS entry files for white page backgrounds, near-black text, light gray borders, restrained shadows, and smaller radii.
+    - Neutralized bright blue/green/yellow status and accent colors into monochrome treatments, while preserving red for errors/destructive states.
+    - Standardized primary buttons as black with white text and secondary surfaces as white/light-gray with black text.
+    - Improved navigation responsiveness: Department tabs now scroll horizontally on narrow screens; Hub Dashboard sidebar becomes a compact horizontal nav on small screens.
+*   **Files modified**:
+    - `client/src/index.css`
+    - `client/src/App.tsx`
+    - `hub-dashboard/src/index.css`
+    - `hub-dashboard/src/App.tsx`
+*   **Verification**:
+    - `client`: `npm run build` passed; `npm test` passed (205/205).
+    - `hub-dashboard`: `npm run build` passed; `npm test` passed (59/59). Vite emitted the pre-existing large dashboard chunk warning.
+    - Temporary Vite preview servers were started for local inspection setup and then stopped.
+
+### Session: 2026-06-12 (Local Dept A Rename to CCS)
+*   **Scope**: Renamed the local runner's Dept A label from `Security` to `College of Computer Studies` to match Docker Compose.
+*   **Files modified**:
+    - `start_local.sh` — `DEPT_NAME="College of Computer Studies"`, `ccs.db`, `ccs.log`, console label updated.
+    - `README.md` — local/manual run instructions updated from Security to College of Computer Studies.
+*   **Verification**: Static grep/diff check confirmed the local runner and README no longer use `Security` for Dept A.
+
 ### Session: 2026-06-09 (Edge Case Testing Optimization & Bug Resolution)
 *   **Scope**: Isolated node database file paths, optimized PII normalizations, and refined process cleanup during offline testing simulation.
 *   **Files modified**:
